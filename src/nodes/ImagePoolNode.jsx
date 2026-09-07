@@ -1,8 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Images, Upload, Trash2, CheckCircle2, Box, LayoutGrid, Columns, Search, Sparkles, Sliders, Unlink2 } from 'lucide-react';
+import { Images, Upload, Trash2, CheckCircle2, Box, LayoutGrid, Columns, Search, Sparkles, Sliders, Unlink2, TextCursorInput } from 'lucide-react';
 import { DEFAULT_CORAL_PRESETS } from '../engine/defaultCorals';
 import { parseCoralReefTaxonomy, CORAL_SPECIES_PRESETS } from '../engine/coralTaxonomy';
+import { parseCharacteristicsToParams } from '../engine/textToGeometry';
 import MiniSpecimenViewport from '../components/MiniSpecimenViewport';
 
 export default function ImagePoolNode({ data, id }) {
@@ -18,6 +19,32 @@ export default function ImagePoolNode({ data, id }) {
   const [coralNameInput, setCoralNameInput] = useState('');
   // Fidelity slider state: 0.2 (Low) to 1.0 (Highest Ultra-HD Fidelity)
   const [fidelity, setFidelity] = useState(0.95);
+
+  const [nlpTexts, setNlpTexts] = useState({
+    morphological: '',
+    geometrical: '',
+    spatial: '',
+    ecological: ''
+  });
+
+  const handleNlpChange = (key, val) => {
+    const newTexts = { ...nlpTexts, [key]: val };
+    setNlpTexts(newTexts);
+
+    if (selectedImage && data.onSelectImage) {
+      const baseFeatures = selectedImage.features || DEFAULT_CORAL_PRESETS[0].features;
+      const updatedFeatures = parseCharacteristicsToParams(newTexts, baseFeatures);
+      
+      const updatedImg = {
+        ...selectedImage,
+        features: {
+          ...updatedFeatures,
+          fidelity: fidelity,
+        },
+      };
+      data.onSelectImage(id, updatedImg);
+    }
+  };
 
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files || []);
@@ -268,6 +295,59 @@ export default function ImagePoolNode({ data, id }) {
                 {preset.commonName}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* NLP Text-to-Geometry Inputs */}
+        <div style={{
+          background: 'rgba(168, 85, 247, 0.05)',
+          border: '1px solid rgba(168, 85, 247, 0.3)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '10px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#c084fc', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <TextCursorInput size={12} /> NLP Semantic Prompting
+            </span>
+            <span style={{ fontSize: '9px', color: 'var(--text-dim)' }}>Overrides Image Features</span>
+          </div>
+          
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <input 
+              type="text"
+              placeholder="Morphological (e.g. high branching staghorn)"
+              className="nodrag nopan"
+              value={nlpTexts.morphological}
+              onChange={(e) => handleNlpChange('morphological', e.target.value)}
+              style={{ width: '100%', padding: '6px', fontSize: '9px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '4px', outline: 'none' }}
+            />
+            <input 
+              type="text"
+              placeholder="Geometrical (e.g. high rugosity, complex)"
+              className="nodrag nopan"
+              value={nlpTexts.geometrical}
+              onChange={(e) => handleNlpChange('geometrical', e.target.value)}
+              style={{ width: '100%', padding: '6px', fontSize: '9px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '4px', outline: 'none' }}
+            />
+            <input 
+              type="text"
+              placeholder="Spatial (e.g. dense pores, high sinuosity)"
+              className="nodrag nopan"
+              value={nlpTexts.spatial}
+              onChange={(e) => handleNlpChange('spatial', e.target.value)}
+              style={{ width: '100%', padding: '6px', fontSize: '9px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '4px', outline: 'none' }}
+            />
+            <input 
+              type="text"
+              placeholder="Ecological (e.g. glowing, red fluorescence)"
+              className="nodrag nopan"
+              value={nlpTexts.ecological}
+              onChange={(e) => handleNlpChange('ecological', e.target.value)}
+              style={{ width: '100%', padding: '6px', fontSize: '9px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '4px', outline: 'none' }}
+            />
           </div>
         </div>
 
