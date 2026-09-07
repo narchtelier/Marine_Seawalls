@@ -22,6 +22,7 @@ import ThreeViewportNode from './nodes/ThreeViewportNode';
 import SubstrateSeawallNode from './nodes/SubstrateSeawallNode';
 import ExportNode from './nodes/ExportNode';
 import DeletableEdge from './components/DeletableEdge';
+import SOMGridViewportNode from './nodes/SOMGridViewportNode';
 
 import { DEFAULT_CORAL_PRESETS } from './engine/defaultCorals';
 import { analyzeCoralImage } from './engine/imageAnalysis';
@@ -33,6 +34,7 @@ const nodeTypes = {
   threeViewport: ThreeViewportNode,
   substrateSeawall: SubstrateSeawallNode,
   exportNode: ExportNode,
+  somGridViewport: SOMGridViewportNode,
 };
 
 const edgeTypes = {
@@ -117,6 +119,37 @@ function FlowApp() {
       meanderingFreq: parseFloat(bMean.toFixed(3)),
       fractalDimension: parseFloat(bFrac.toFixed(3)),
     }));
+    
+    // Update SOM Grid Node with incoming extractors
+    setNodes((nds) => 
+      nds.map(n => 
+        n.type === 'somGridViewport' 
+          ? { ...n, data: { ...n.data, extractors: incomingExtractors.map(e => ({ specimenName: e.data.specimenName, features: e.data.features })) } }
+          : n
+      )
+    );
+  }, []);
+
+  // Update all parameters at once (e.g., from SOM Grid click)
+  const handleSetAllParameters = useCallback((newParams) => {
+    setSynthesizedParams((prev) => {
+      const updated = { ...prev, ...newParams };
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.type === 'morphologyControls' || n.type === 'threeViewport' || n.type === 'exportNode' || n.type === 'substrateSeawall') {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                parameters: updated,
+              },
+            };
+          }
+          return n;
+        })
+      );
+      return updated;
+    });
   }, []);
 
   // Update a parameter directly
@@ -388,6 +421,18 @@ function FlowApp() {
         },
       },
       {
+        id: 'node-som-grid',
+        type: 'somGridViewport',
+        position: { x: 880, y: 620 },
+        data: {
+          extractors: [
+            { specimenName: pA.name, features: pA.features },
+            { specimenName: pB.name, features: pB.features },
+          ],
+          onSetSynthesizedParams: handleSetAllParameters,
+        },
+      },
+      {
         id: 'node-three-viewport',
         type: 'threeViewport',
         position: { x: 1340, y: 220 },
@@ -401,7 +446,7 @@ function FlowApp() {
       {
         id: 'node-substrate-seawall',
         type: 'substrateSeawall',
-        position: { x: 880, y: 800 },
+        position: { x: 880, y: 1050 },
         data: {
           parameters: synthesizedParams,
           onUpdateParameter: handleUpdateParameter,
@@ -636,6 +681,19 @@ function FlowApp() {
         },
       },
       {
+        id: 'node-som-grid',
+        type: 'somGridViewport',
+        position: { x: 880, y: 650 },
+        data: {
+          extractors: [
+            { specimenName: pA.name, features: pA.features },
+            { specimenName: pB.name, features: pB.features },
+            { specimenName: pC.name, features: pC.features },
+          ],
+          onSetSynthesizedParams: handleSetAllParameters,
+        },
+      },
+      {
         id: 'node-three-viewport',
         type: 'threeViewport',
         position: { x: 1340, y: 250 },
@@ -649,7 +707,7 @@ function FlowApp() {
       {
         id: 'node-substrate-seawall',
         type: 'substrateSeawall',
-        position: { x: 880, y: 850 },
+        position: { x: 880, y: 1100 },
         data: {
           parameters: synthesizedParams,
           onUpdateParameter: handleUpdateParameter,
