@@ -352,7 +352,7 @@ function FlowApp() {
       {
         id: 'node-pool-1',
         type: 'imagePool',
-        position: { x: 50, y: 80 },
+        position: { x: 50, y: 50 },
         data: {
           label: '1A. Reference Pool (Staghorn)',
           images: DEFAULT_CORAL_PRESETS,
@@ -366,7 +366,7 @@ function FlowApp() {
       {
         id: 'node-extractor-1',
         type: 'featureExtractor',
-        position: { x: 440, y: 80 },
+        position: { x: 500, y: 50 },
         data: {
           label: '2A. Extractor (Staghorn)',
           specimenName: pA.name,
@@ -377,7 +377,7 @@ function FlowApp() {
       {
         id: 'node-pool-2',
         type: 'imagePool',
-        position: { x: 50, y: 480 },
+        position: { x: 50, y: 650 },
         data: {
           label: '1B. Reference Pool (Brain Coral)',
           images: DEFAULT_CORAL_PRESETS,
@@ -391,7 +391,7 @@ function FlowApp() {
       {
         id: 'node-extractor-2',
         type: 'featureExtractor',
-        position: { x: 440, y: 480 },
+        position: { x: 500, y: 650 },
         data: {
           label: '2B. Extractor (Brain Coral)',
           specimenName: pB.name,
@@ -403,7 +403,7 @@ function FlowApp() {
       {
         id: 'node-synthesizer',
         type: 'morphologyControls',
-        position: { x: 880, y: 220 },
+        position: { x: 1000, y: 300 },
         data: {
           label: '3. Morphology Multi-Input Synthesizer',
           parameters: synthesizedParams,
@@ -423,7 +423,7 @@ function FlowApp() {
       {
         id: 'node-som-grid',
         type: 'somGridViewport',
-        position: { x: 880, y: 620 },
+        position: { x: 1000, y: 800 },
         data: {
           extractors: [
             { specimenName: pA.name, features: pA.features },
@@ -435,7 +435,7 @@ function FlowApp() {
       {
         id: 'node-three-viewport',
         type: 'threeViewport',
-        position: { x: 1340, y: 220 },
+        position: { x: 1550, y: 300 },
         data: {
           parameters: synthesizedParams,
           onCoralMeshReady: setCoralMesh,
@@ -446,7 +446,7 @@ function FlowApp() {
       {
         id: 'node-substrate-seawall',
         type: 'substrateSeawall',
-        position: { x: 880, y: 1050 },
+        position: { x: 1000, y: 1250 },
         data: {
           parameters: synthesizedParams,
           onUpdateParameter: handleUpdateParameter,
@@ -457,7 +457,7 @@ function FlowApp() {
       {
         id: 'node-export',
         type: 'exportNode',
-        position: { x: 1820, y: 220 },
+        position: { x: 2100, y: 300 },
         data: {
           coralMesh,
           parameters: synthesizedParams,
@@ -472,6 +472,7 @@ function FlowApp() {
       { id: 'e-p2-e2', source: 'node-pool-2', sourceHandle: 'image-out', target: 'node-extractor-2', targetHandle: 'image-in', animated: true },
       { id: 'e-e1-s', source: 'node-extractor-1', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
       { id: 'e-e2-s', source: 'node-extractor-2', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
+      { id: 'e-s-som', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-som-grid', targetHandle: 'grid-in', animated: true, style: { strokeDasharray: '5,5' } },
       { id: 'e-s-v', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
       { id: 'e-sub-v', source: 'node-substrate-seawall', sourceHandle: 'substrate-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
       { id: 'e-v-exp', source: 'node-three-viewport', sourceHandle: 'viewport-out', target: 'node-export', targetHandle: 'export-in', animated: true },
@@ -598,7 +599,7 @@ function FlowApp() {
       {
         id: 'node-extractor-1',
         type: 'featureExtractor',
-        position: { x: 440, y: 50 },
+        position: { x: 500, y: 50 },
         data: {
           label: '2A. Extractor (Staghorn)',
           specimenName: pA.name,
@@ -610,7 +611,7 @@ function FlowApp() {
       {
         id: 'node-pool-2',
         type: 'imagePool',
-        position: { x: 50, y: 400 },
+        position: { x: 50, y: 650 },
         data: {
           label: '1B. Pool (Brain Coral)',
           images: DEFAULT_CORAL_PRESETS,
@@ -624,7 +625,7 @@ function FlowApp() {
       {
         id: 'node-extractor-2',
         type: 'featureExtractor',
-        position: { x: 440, y: 400 },
+        position: { x: 500, y: 650 },
         data: {
           label: '2B. Extractor (Brain Coral)',
           specimenName: pB.name,
@@ -636,7 +637,7 @@ function FlowApp() {
       {
         id: 'node-pool-3',
         type: 'imagePool',
-        position: { x: 50, y: 750 },
+        position: { x: 50, y: 1250 },
         data: {
           label: '1C. Pool (Massive Boulder)',
           images: DEFAULT_CORAL_PRESETS,
@@ -650,7 +651,7 @@ function FlowApp() {
       {
         id: 'node-extractor-3',
         type: 'featureExtractor',
-        position: { x: 440, y: 750 },
+        position: { x: 500, y: 1250 },
         data: {
           label: '2C. Extractor (Massive Boulder)',
           specimenName: pC.name,
@@ -662,7 +663,7 @@ function FlowApp() {
       {
         id: 'node-synthesizer',
         type: 'morphologyControls',
-        position: { x: 880, y: 250 },
+        position: { x: 1000, y: 600 },
         data: {
           label: '3. Triple-Input Morphology Synthesizer',
           parameters: synthesizedParams,
@@ -683,7 +684,7 @@ function FlowApp() {
       {
         id: 'node-som-grid',
         type: 'somGridViewport',
-        position: { x: 880, y: 650 },
+        position: { x: 1000, y: 1100 },
         data: {
           extractors: [
             { specimenName: pA.name, features: pA.features },
@@ -696,7 +697,7 @@ function FlowApp() {
       {
         id: 'node-three-viewport',
         type: 'threeViewport',
-        position: { x: 1340, y: 250 },
+        position: { x: 1550, y: 600 },
         data: {
           parameters: synthesizedParams,
           onCoralMeshReady: setCoralMesh,
@@ -707,7 +708,7 @@ function FlowApp() {
       {
         id: 'node-substrate-seawall',
         type: 'substrateSeawall',
-        position: { x: 880, y: 1100 },
+        position: { x: 1000, y: 1600 },
         data: {
           parameters: synthesizedParams,
           onUpdateParameter: handleUpdateParameter,
@@ -718,7 +719,7 @@ function FlowApp() {
       {
         id: 'node-export',
         type: 'exportNode',
-        position: { x: 1820, y: 250 },
+        position: { x: 2100, y: 600 },
         data: {
           coralMesh,
           parameters: synthesizedParams,
@@ -735,6 +736,7 @@ function FlowApp() {
       { id: 'e-e1-s', source: 'node-extractor-1', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
       { id: 'e-e2-s', source: 'node-extractor-2', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
       { id: 'e-e3-s', source: 'node-extractor-3', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
+      { id: 'e-s-som', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-som-grid', targetHandle: 'grid-in', animated: true, style: { strokeDasharray: '5,5' } },
       { id: 'e-s-v', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
       { id: 'e-sub-v', source: 'node-substrate-seawall', sourceHandle: 'substrate-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
       { id: 'e-v-exp', source: 'node-three-viewport', sourceHandle: 'viewport-out', target: 'node-export', targetHandle: 'export-in', animated: true },
