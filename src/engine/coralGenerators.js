@@ -1,11 +1,17 @@
 import * as THREE from 'three';
+import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
 import { createNoise3D } from 'simplex-noise';
+import { GrayScottSolver } from './reactionDiffusion';
+import { getAragoniteNormalMap, getAragoniteRoughnessMap } from './coralTextures';
 
 const noise3D = createNoise3D();
+const brainSolver = new GrayScottSolver(128, 0.038, 0.062);
+brainSolver.step(120); // Pre-compute labyrinthine meander patterns
 
 /**
- * Continuous Morphological 3D Coral Geometry & Mesh Generator
- * Generates continuous geometric interpolations between coral phenotypes
+ * World-Class Biomechanical Coral Morphogenesis Engine
+ * Uses Three.js MarchingCubes for seamless implicit calcification,
+ * Turing Reaction-Diffusion for meandroid valleys, and polar sclerosepta polyps.
  */
 
 export function createProceduralCoral(parameters) {
@@ -16,9 +22,7 @@ export function createProceduralCoral(parameters) {
     caliceDensity = 0.5,
     meanderingFreq = 0.2,
     fractalDimension = 1.7,
-    axialDominance = 0.8,
     growthScale = 1.0,
-    polypSize = 0.08,
     primaryColor = '#0ea5e9',
     secondaryColor = '#0284c7',
     tentacleGlow = '#38bdf8',
@@ -29,31 +33,62 @@ export function createProceduralCoral(parameters) {
   const group = new THREE.Group();
   group.name = 'CoralColony';
 
-  // Coral PBR Material with Subsurface Scattering Glow
+  // Procedural Micro-Textures
+  const normalMap = getAragoniteNormalMap();
+  const roughnessMap = getAragoniteRoughnessMap();
+
+  // Coral Biocrystal Aragonite CaCO3 Material with Micro-Textures & SSS
   const coralMaterial = new THREE.MeshStandardMaterial({
     color: new THREE.Color(primaryColor),
-    roughness: Math.max(0.18, 0.92 - rugosity * 0.45),
-    metalness: 0.08,
+    roughness: Math.max(0.22, 0.82 - rugosity * 0.35),
+    metalness: 0.04,
+    normalMap: normalMap,
+    normalScale: new THREE.Vector2(0.8 + rugosity * 0.8, 0.8 + rugosity * 0.8),
+    roughnessMap: roughnessMap,
     flatShading: false,
   });
 
-  const polypsGroup = new THREE.Group();
+  // Inject Fresnel Subsurface Translucency for living coenosarc light transmission
+  coralMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.subsurfaceColor = { value: new THREE.Color(tentacleGlow || '#38bdf8') };
 
-  // If branching factor is very low (< 0.2) or meandering/calices dominant, morph into solid boulder/brain
-  let mainMesh;
-  if (branchingFactor > 0.25) {
-    mainMesh = buildContinuousBranchingMorphMesh(parameters, coralMaterial, polypsGroup);
-  } else if (meanderingFreq > 0.45) {
-    mainMesh = buildContinuousBrainMorphMesh(parameters, coralMaterial, polypsGroup);
-  } else if (morphologyType === 'table') {
-    mainMesh = buildContinuousTableMorphMesh(parameters, coralMaterial, polypsGroup);
-  } else {
-    mainMesh = buildContinuousMassiveMorphMesh(parameters, coralMaterial, polypsGroup);
-  }
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <common>',
+      `#include <common>
+       uniform vec3 subsurfaceColor;
+      `
+    );
 
-  group.add(mainMesh);
+    // Biological Fresnel Translucency Rim
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <dithering_fragment>',
+      `#include <dithering_fragment>
+       vec3 viewDir = normalize(vViewPosition);
+       float fresnel = 1.0 - max(0.0, dot(normal, -viewDir));
+       float rim = pow(fresnel, 2.6) * 0.55;
+       gl_FragColor.rgb += subsurfaceColor * rim;
+      `
+    );
+  };
 
-  if (showPolyps && polypsGroup.children.length > 0) {
+  const fidelity = parameters.fidelity !== undefined ? parameters.fidelity : 0.8;
+  // Scalable grid resolution: from 26 (fast low) up to 54 (highest fidelity trabecular detail)
+  const resolution = parameters.resolution || Math.min(54, Math.max(26, Math.round(26 + fidelity * 28)));
+  const maxPoly = Math.round(70000 + fidelity * 130000);
+
+  const mc = new MarchingCubes(resolution, coralMaterial, true, true, maxPoly);
+  mc.position.set(0, 1.2 * growthScale, 0);
+  mc.scale.set(1.6 * growthScale, 1.6 * growthScale, 1.6 * growthScale);
+  mc.isolation = 80;
+
+  // Populate implicit potential field
+  populateCoralPotentialField(mc, parameters);
+
+  group.add(mc);
+
+  // Meso-Scale Corallite Polyps with S1/S2/S3 Radial Sclerosepta
+  if (showPolyps && caliceDensity > 0.08) {
+    const polypsGroup = buildMesoCorallitePolyps(parameters);
     group.add(polypsGroup);
   }
 
@@ -67,221 +102,273 @@ export function createProceduralCoral(parameters) {
 }
 
 /**
- * Continuous Branching Coral with Meandroid Surface Morphing & Calices
+ * Evaluates the multi-phenotype continuous potential field in Marching Cubes
  */
-function buildContinuousBranchingMorphMesh(params, material, polypsGroup) {
+function populateCoralPotentialField(mc, params) {
+  mc.reset();
   const {
-    branchingFactor,
-    rugosity,
-    caliceDensity,
-    meanderingFreq,
-    fractalDimension,
-    growthScale,
-    tentacleGlow,
+    branchingFactor = 0.8,
+    rugosity = 0.6,
+    meanderingFreq = 0.2,
+    caliceDensity = 0.5,
+    fractalDimension = 1.7,
+    fidelity = 0.8,
   } = params;
 
-  const geometries = [];
-  const depth = Math.min(5, Math.max(2, Math.round(fractalDimension * 2.1)));
+  const size = mc.size;
+  const field = mc.field;
 
-  function growBranch(start, dir, length, radius, level) {
-    if (level > depth || length < 0.12) return;
+  // 1. Generate Phototropism Branch Nodes (Space Colonization)
+  const branchNodes = generateBranchNodes(branchingFactor, fractalDimension, fidelity);
 
-    const end = start.clone().add(dir.clone().multiplyScalar(length));
-    const radialSegs = Math.max(8, Math.round(14 * (1 - level * 0.12)));
-    const cylGeo = new THREE.CylinderGeometry(radius * 0.65, radius, length, radialSegs, 6);
+  // 2. Continuous Latent Archetype Weights
+  const wBranch = Math.max(0, branchingFactor - 0.15);
+  const wBrain = meanderingFreq * (1.0 - wBranch * 0.7);
+  const wMassive = caliceDensity * (1.0 - wBranch * 0.7 - wBrain * 0.7);
+  const wTable = Math.max(0, 1.0 - wBranch - wBrain - wMassive);
 
-    const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-    const orientation = new THREE.Matrix4();
-    const up = new THREE.Vector3(0, 1, 0);
-    const axis = new THREE.Vector3().crossVectors(up, dir).normalize();
-    const angle = Math.acos(Math.min(1, Math.max(-1, up.dot(dir))));
+  const sumW = wBranch + wBrain + wMassive + wTable || 1.0;
+  const normBranch = wBranch / sumW;
+  const normBrain = wBrain / sumW;
+  const normMassive = wMassive / sumW;
+  const normTable = wTable / sumW;
 
-    if (axis.length() > 0.001) {
-      orientation.makeRotationAxis(axis, angle);
-    }
-    orientation.setPosition(midPoint);
+  // Evaluate 3D density at each voxel in the Marching Cubes grid [0, size-1]
+  for (let k = 0; k < size; k++) {
+    const zNorm = (k / (size - 1)) * 2.0 - 1.0; // [-1, 1]
+    for (let j = 0; j < size; j++) {
+      const yNorm = (j / (size - 1)) * 2.0 - 1.0; // [-1, 1]
+      for (let i = 0; i < size; i++) {
+        const xNorm = (i / (size - 1)) * 2.0 - 1.0; // [-1, 1]
+        const idx = i + j * size + k * size * size;
 
-    // Continuous vertex displacement blending rugosity + meander grooves + polyp calice dips
-    const pos = cylGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const vx = pos.getX(i);
-      const vy = pos.getY(i);
-      const vz = pos.getZ(i);
+        // Ground plane truncation
+        if (yNorm < -0.85) {
+          field[idx] = 0;
+          continue;
+        }
 
-      // Meandroid ridge modulation along stem
-      const meanderWave = Math.sin(vy * (8 + meanderingFreq * 16) + noise3D(vx * 4, vy * 4, vz * 4) * 4) * (0.05 * meanderingFreq);
-      const rugoNoise = noise3D(vx * 5 + level, vy * 5, vz * 5) * (rugosity * 0.08);
+        // A. Branching Density (Sum of inverse squared distances to skeleton segments)
+        let branchDensity = 0;
+        for (let b = 0; b < branchNodes.length; b++) {
+          const node = branchNodes[b];
+          const distSq = distToSegmentSq(xNorm, yNorm, zNorm, node.p1, node.p2);
+          const r = node.radius;
+          if (distSq < r * r * 4.0) {
+            branchDensity += 120.0 / (1.0 + (distSq / (r * r)));
+          }
+        }
 
-      pos.setXYZ(i, vx + vx * (rugoNoise + meanderWave), vy, vz + vz * (rugoNoise + meanderWave));
-    }
-    cylGeo.computeVertexNormals();
-    cylGeo.applyMatrix4(orientation);
-    geometries.push(cylGeo);
+        // B. Brain Coral Density (Sphere + Turing Reaction Diffusion Manifold)
+        const distCenter = Math.sqrt(xNorm * xNorm + (yNorm + 0.1) * (yNorm + 0.1) + zNorm * zNorm);
+        const phi = Math.atan2(zNorm, xNorm);
+        const theta = Math.acos(Math.max(-1, Math.min(1, (yNorm + 0.1) / (distCenter + 1e-4))));
+        const uCoord = (phi / (Math.PI * 2) + 0.5) * (3.0 + meanderingFreq * 6.0);
+        const vCoord = (theta / Math.PI) * (3.0 + meanderingFreq * 6.0);
+        const turingVal = brainSolver.sample(uCoord, vCoord);
+        
+        let brainDensity = 0;
+        if (distCenter < 0.85) {
+          const meanderOffset = (turingVal - 0.5) * (0.35 * rugosity);
+          const effectiveRadius = 0.65 + meanderOffset;
+          if (distCenter < effectiveRadius) {
+            brainDensity = 140.0 * (1.0 - (distCenter / effectiveRadius));
+          }
+        }
 
-    // Calice Polyps along branches
-    if (caliceDensity > 0.1 && Math.random() < caliceDensity * 1.3) {
-      const polypGeo = new THREE.SphereGeometry(radius * 0.42, 6, 6);
-      polypGeo.applyMatrix4(orientation);
-      const polypMesh = new THREE.Mesh(polypGeo, new THREE.MeshStandardMaterial({
-        color: new THREE.Color(tentacleGlow || '#38bdf8'),
-        emissive: new THREE.Color(tentacleGlow || '#38bdf8'),
-        emissiveIntensity: 0.5,
-      }));
-      polypsGroup.add(polypMesh);
-    }
+        // C. Massive Coral Density (Organic Boulder Lobes)
+        const lobeNoise = noise3D(xNorm * 2.5, yNorm * 2.5, zNorm * 2.5) * (0.2 * rugosity);
+        const massRadius = 0.68 + lobeNoise;
+        let massiveDensity = 0;
+        if (distCenter < massRadius) {
+          massiveDensity = 150.0 * (1.0 - (distCenter / massRadius));
+        }
 
-    // Branching bifurcation count modulated by branchingFactor
-    const branchProb = branchingFactor;
-    const branchCount = level === 1 ? (branchFactorToCount(branchingFactor)) : (Math.random() < branchProb ? 2 : 1);
+        // D. Table Foliose Density (Tiered Horizontal Fronds)
+        const rXZ = Math.sqrt(xNorm * xNorm + zNorm * zNorm);
+        let tableDensity = 0;
+        // Central pedestal
+        if (rXZ < 0.2 && yNorm < 0.5) {
+          tableDensity += 110.0;
+        }
+        // Shelf 1
+        const dY1 = Math.abs(yNorm - 0.05);
+        if (dY1 < 0.12 && rXZ < 0.82) {
+          tableDensity += 130.0 * (1.0 - dY1 / 0.12);
+        }
+        // Shelf 2
+        const dY2 = Math.abs(yNorm - 0.45);
+        if (dY2 < 0.10 && rXZ < 0.58) {
+          tableDensity += 120.0 * (1.0 - dY2 / 0.10);
+        }
 
-    for (let b = 0; b < branchCount; b++) {
-      const spreadAngle = (0.25 + (1 - branchingFactor * 0.5) * 0.4) * (1 + b * 0.2);
-      const rotAngle = (b / Math.max(1, branchCount)) * Math.PI * 2 + level * 1.4;
+        // Blend densities continuously
+        let totalDensity =
+          normBranch * branchDensity +
+          normBrain * brainDensity +
+          normMassive * massiveDensity +
+          normTable * tableDensity;
 
-      const sideDir = new THREE.Vector3(Math.cos(rotAngle), 0, Math.sin(rotAngle));
-      const newDir = dir.clone().multiplyScalar(0.7)
-        .add(sideDir.multiplyScalar(Math.sin(spreadAngle)))
-        .normalize();
+        // Micro-Rugosity Aragonite noise
+        const microNoise = noise3D(xNorm * 5.0, yNorm * 5.0, zNorm * 5.0) * (15.0 * rugosity);
+        const calicePores = Math.sin(noise3D(xNorm * 10.0, yNorm * 10.0, zNorm * 10.0) * 12.0) * (8.0 * caliceDensity);
 
-      const nextLen = length * (0.68 + (branchingFactor * 0.1));
-      const nextRad = radius * (0.7 + (1 - branchingFactor) * 0.1);
+        // High-frequency 3D noise for trabecular porosity and cavities
+        const cavityNoise1 = noise3D(xNorm * 3.5, yNorm * 3.5 + 10.5, zNorm * 3.5);
+        const cavityNoise2 = noise3D(xNorm * 7.0, yNorm * 7.0 - 5.5, zNorm * 7.0);
+        let cavitySubtraction = 0;
+        
+        // Thresholds for carving out space
+        if (cavityNoise1 > 0.35) {
+           // Deep large cavities
+           cavitySubtraction += (cavityNoise1 - 0.35) * 280.0 * (0.4 + rugosity * 0.6);
+        }
+        if (cavityNoise2 > 0.55) {
+           // Small micropores
+           cavitySubtraction += (cavityNoise2 - 0.55) * 450.0 * (0.2 + caliceDensity * 0.8);
+        }
 
-      growBranch(end, newDir, nextLen, nextRad, level + 1);
-    }
-  }
+        // Apply a high-contrast density threshold to ensure sharp branching rather than blobs
+        if (normBranch > 0.5 && branchDensity > 0) {
+            // Sharpen branches by suppressing low-density halos
+            if (branchDensity < 60) {
+                totalDensity *= 0.5;
+            }
+        }
 
-  function branchFactorToCount(bf) {
-    if (bf > 0.7) return 4;
-    if (bf > 0.4) return 3;
-    return 2;
-  }
-
-  const startPos = new THREE.Vector3(0, 0, 0);
-  const startDir = new THREE.Vector3(0, 1, 0);
-  const baseLength = (1.1 + (1 - branchingFactor) * 0.3) * growthScale;
-  const baseRadius = (0.35 + (1 - branchingFactor) * 0.25) * growthScale;
-
-  growBranch(startPos, startDir, baseLength, baseRadius, 1);
-
-  const mergedGeo = mergeBufferGeometries(geometries);
-  return new THREE.Mesh(mergedGeo, material);
-}
-
-/**
- * Continuous Brain Coral with Variable Meander Frequency & Rugosity
- */
-function buildContinuousBrainMorphMesh(params, material, polypsGroup) {
-  const { rugosity, meanderingFreq, caliceDensity, growthScale } = params;
-
-  const radius = 1.4 * growthScale;
-  const geometry = new THREE.SphereGeometry(radius, 64, 64);
-  const pos = geometry.attributes.position;
-
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-
-    if (y < -radius * 0.38) {
-      pos.setY(i, -radius * 0.38);
-      continue;
-    }
-
-    const freq = 3.0 + meanderingFreq * 6.5;
-    const n1 = noise3D(x * freq, y * freq, z * freq);
-    const n2 = noise3D(x * freq * 2.2, y * freq * 2.2, z * freq * 2.2);
-
-    const ridge = Math.sin(n1 * Math.PI * 3.0) * (0.24 * rugosity);
-    const pores = Math.sin(n2 * 8.0) * (0.04 * caliceDensity);
-
-    const normal = new THREE.Vector3(x, y, z).normalize();
-    const disp = ridge + pores;
-
-    pos.setXYZ(i, x + normal.x * disp, y + normal.y * disp, z + normal.z * disp);
-  }
-
-  geometry.computeVertexNormals();
-  return new THREE.Mesh(geometry, material);
-}
-
-/**
- * Continuous Massive Coral (Porites organic boulder with calice pore field)
- */
-function buildContinuousMassiveMorphMesh(params, material, polypsGroup) {
-  const { rugosity, caliceDensity, growthScale } = params;
-
-  const radius = 1.35 * growthScale;
-  const geometry = new THREE.IcosahedronGeometry(radius, 5);
-  const pos = geometry.attributes.position;
-
-  for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const z = pos.getZ(i);
-
-    if (y < -radius * 0.38) {
-      pos.setY(i, -radius * 0.38);
-      continue;
-    }
-
-    const lobe1 = noise3D(x * 1.1, y * 1.1, z * 1.1) * 0.32;
-    const lobe2 = noise3D(x * 3.8, y * 3.8, z * 3.8) * (0.16 * rugosity);
-    const calices = Math.sin(noise3D(x * 9.0, y * 9.0, z * 9.0) * 14.0) * (0.05 * caliceDensity);
-
-    const normal = new THREE.Vector3(x, y, z).normalize();
-    const totalDisp = lobe1 + lobe2 + calices;
-
-    pos.setXYZ(i, x + normal.x * totalDisp, y + normal.y * totalDisp, z + normal.z * totalDisp);
-  }
-
-  geometry.computeVertexNormals();
-  return new THREE.Mesh(geometry, material);
-}
-
-/**
- * Continuous Table / Foliose Coral
- */
-function buildContinuousTableMorphMesh(params, material, polypsGroup) {
-  const { rugosity, growthScale, caliceDensity } = params;
-  const geometries = [];
-
-  const trunkHeight = 1.1 * growthScale;
-  const trunkGeo = new THREE.CylinderGeometry(0.22, 0.42, trunkHeight, 16);
-  trunkGeo.translate(0, trunkHeight / 2, 0);
-  geometries.push(trunkGeo);
-
-  const tierCount = 3;
-  for (let t = 0; t < tierCount; t++) {
-    const tierY = trunkHeight * (0.45 + (t / tierCount) * 0.65);
-    const plateRadius = (1.85 - t * 0.38) * growthScale;
-    const plateGeo = new THREE.CylinderGeometry(plateRadius, plateRadius * 0.88, 0.08 * growthScale, 36);
-
-    const pos = plateGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const vx = pos.getX(i);
-      const vy = pos.getY(i);
-      const vz = pos.getZ(i);
-      const angle = Math.atan2(vz, vx);
-      const dist = Math.sqrt(vx * vx + vz * vz);
-
-      if (dist > plateRadius * 0.45) {
-        const wave = Math.sin(angle * (6 + t * 2)) * (0.14 * rugosity);
-        const noise = noise3D(vx * 2.5, vy, vz * 2.5) * (0.08 * rugosity);
-        pos.setY(i, vy + wave + noise);
+        field[idx] = Math.max(0, totalDensity + microNoise + calicePores - cavitySubtraction);
       }
     }
-    plateGeo.computeVertexNormals();
-    plateGeo.translate(0, tierY, 0);
-    geometries.push(plateGeo);
   }
 
-  const merged = mergeBufferGeometries(geometries);
-  return new THREE.Mesh(merged, material);
+  mc.update();
+}
+
+/**
+ * Generates phototropism branch skeletal segments in normalized [-1, 1] cube
+ */
+function generateBranchNodes(branchingFactor, fractalDimension, fidelity = 0.8) {
+  const nodes = [];
+  const depth = Math.min(5, Math.max(2, Math.round(fractalDimension * 1.8 + (fidelity - 0.5) * 0.8)));
+
+  function addSegment(p1, dir, length, radius, level) {
+    if (level > depth || length < 0.08) return;
+
+    // Upward phototropism vector
+    const phototropism = new THREE.Vector3(0, 0.4, 0);
+    const finalDir = dir.clone().add(phototropism).normalize();
+
+    const p2 = [
+      p1[0] + finalDir.x * length,
+      p1[1] + finalDir.y * length,
+      p1[2] + finalDir.z * length,
+    ];
+
+    nodes.push({ p1, p2, radius });
+
+    const numBranches = level === 1 ? (branchingFactor > 0.6 ? 4 : 3) : (Math.random() < branchingFactor ? 2 : 1);
+
+    for (let b = 0; b < numBranches; b++) {
+      const spread = (0.35 + (1 - branchingFactor * 0.4) * 0.35) * (1 + b * 0.15);
+      const azimuth = (b / Math.max(1, numBranches)) * Math.PI * 2 + level * 1.5;
+
+      const side = new THREE.Vector3(Math.cos(azimuth), 0, Math.sin(azimuth));
+      const nextDir = finalDir.clone().multiplyScalar(0.65).add(side.multiplyScalar(Math.sin(spread))).normalize();
+
+      const nextLen = length * (0.72 + branchingFactor * 0.08);
+      const nextRad = radius * (0.72 + (1 - branchingFactor) * 0.1);
+
+      addSegment(p2, nextDir, nextLen, nextRad, level + 1);
+    }
+  }
+
+  // Trunk base
+  const root = [0, -0.8, 0];
+  const trunkDir = new THREE.Vector3(0, 1, 0);
+  const trunkLen = 0.55;
+  const trunkRad = 0.22;
+
+  addSegment(root, trunkDir, trunkLen, trunkRad, 1);
+  return nodes;
+}
+
+/**
+ * Meso-Scale Radial Corallite Polyps with S1/S2/S3 Septocostae
+ */
+function buildMesoCorallitePolyps(params) {
+  const { caliceDensity = 0.5, tentacleGlow = '#38bdf8', growthScale = 1.0, branchingFactor = 0.8, fidelity = 0.8 } = params;
+  const polypsGroup = new THREE.Group();
+
+  const caliceGeo = buildSingleCoralliteGeometry(0.065 * growthScale);
+  const caliceMat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(tentacleGlow),
+    emissive: new THREE.Color(tentacleGlow),
+    emissiveIntensity: 0.65,
+    roughness: 0.2,
+  });
+
+  const branchNodes = generateBranchNodes(branchingFactor, 1.7, fidelity);
+  const count = Math.min(Math.round(24 + 56 * fidelity), Math.round(branchNodes.length * 4 * caliceDensity));
+
+  for (let i = 0; i < count; i++) {
+    const node = branchNodes[i % branchNodes.length];
+    const t = (i * 0.37) % 1.0;
+    const px = (node.p1[0] + (node.p2[0] - node.p1[0]) * t) * 1.6 * growthScale;
+    const py = (node.p1[1] + (node.p2[1] - node.p1[1]) * t) * 1.6 * growthScale + 1.2 * growthScale;
+    const pz = (node.p1[2] + (node.p2[2] - node.p1[2]) * t) * 1.6 * growthScale;
+
+    const polypMesh = new THREE.Mesh(caliceGeo, caliceMat);
+    const angle = (i * 1.37) * Math.PI * 2;
+    const offsetR = node.radius * 1.6 * growthScale * 0.95;
+    polypMesh.position.set(px + Math.cos(angle) * offsetR, py, pz + Math.sin(angle) * offsetR);
+    
+    // Radial outwards orientation
+    polypMesh.lookAt(px, py, pz);
+    polypsGroup.add(polypMesh);
+  }
+
+  return polypsGroup;
+}
+
+/**
+ * Procedural Corallite Septa Calice Mesh (Radial Sclerosepta)
+ */
+function buildSingleCoralliteGeometry(radius) {
+  const numSepta = 12; // 6 Primary S1 + 6 Secondary S2 septa
+  const geo = new THREE.CylinderGeometry(radius, radius * 1.2, radius * 0.45, 12, 1, false);
+  const pos = geo.attributes.position;
+
+  for (let i = 0; i < pos.count; i++) {
+    const vx = pos.getX(i);
+    const vy = pos.getY(i);
+    const vz = pos.getZ(i);
+    const angle = Math.atan2(vz, vx);
+
+    // Radial ribbed sclerosepta teeth
+    const septalRib = Math.sin(angle * numSepta) * (radius * 0.18);
+    pos.setX(i, vx + Math.cos(angle) * septalRib);
+    pos.setZ(i, vz + Math.sin(angle) * septalRib);
+  }
+
+  geo.computeVertexNormals();
+  return geo;
+}
+
+function distToSegmentSq(px, py, pz, a, b) {
+  const bax = b[0] - a[0], bay = b[1] - a[1], baz = b[2] - a[2];
+  const pax = px - a[0], pay = py - a[1], paz = pz - a[2];
+  const baLenSq = bax * bax + bay * bay + baz * baz;
+  const h = Math.max(0, Math.min(1, (pax * bax + pay * bay + paz * baz) / (baLenSq + 1e-8)));
+
+  const dx = pax - bax * h;
+  const dy = pay - bay * h;
+  const dz = paz - baz * h;
+  return dx * dx + dy * dy + dz * dz;
 }
 
 function buildSeawallFoundation() {
   const group = new THREE.Group();
-  const blockGeo = new THREE.BoxGeometry(4.5, 0.4, 4.5);
+  const blockGeo = new THREE.BoxGeometry(4.6, 0.4, 4.6);
   const blockMat = new THREE.MeshStandardMaterial({
     color: '#334155',
     roughness: 0.95,
@@ -302,55 +389,4 @@ function buildSeawallFoundation() {
   group.add(ring);
 
   return group;
-}
-
-function mergeBufferGeometries(geometries) {
-  let totalVertices = 0;
-  let totalIndices = 0;
-
-  geometries.forEach(geo => {
-    totalVertices += geo.attributes.position.count;
-    if (geo.index) {
-      totalIndices += geo.index.count;
-    } else {
-      totalIndices += geo.attributes.position.count;
-    }
-  });
-
-  const mergedPosition = new Float32Array(totalVertices * 3);
-  const mergedNormal = new Float32Array(totalVertices * 3);
-  const mergedIndices = new Uint32Array(totalIndices);
-
-  let vertexOffset = 0;
-  let indexOffset = 0;
-
-  geometries.forEach(geo => {
-    const pos = geo.attributes.position.array;
-    const norm = geo.attributes.normal.array;
-    mergedPosition.set(pos, vertexOffset * 3);
-    mergedNormal.set(norm, vertexOffset * 3);
-
-    if (geo.index) {
-      const idx = geo.index.array;
-      for (let i = 0; i < idx.length; i++) {
-        mergedIndices[indexOffset + i] = idx[i] + vertexOffset;
-      }
-      indexOffset += idx.length;
-    } else {
-      for (let i = 0; i < geo.attributes.position.count; i++) {
-        mergedIndices[indexOffset + i] = i + vertexOffset;
-      }
-      indexOffset += geo.attributes.position.count;
-    }
-
-    vertexOffset += geo.attributes.position.count;
-  });
-
-  const mergedGeo = new THREE.BufferGeometry();
-  mergedGeo.setAttribute('position', new THREE.BufferAttribute(mergedPosition, 3));
-  mergedGeo.setAttribute('normal', new THREE.BufferAttribute(mergedNormal, 3));
-  mergedGeo.setIndex(new THREE.BufferAttribute(mergedIndices, 1));
-  mergedGeo.computeVertexNormals();
-
-  return mergedGeo;
 }

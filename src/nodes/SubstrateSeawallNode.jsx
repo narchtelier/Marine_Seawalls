@@ -1,6 +1,7 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Waves, Shield, Anchor, Droplets, Trash2 } from 'lucide-react';
+import { Waves, Shield, Anchor, Droplets, Trash2, Unlink2 } from 'lucide-react';
+import ParamInfo from '../components/ParamInfo';
 
 export default function SubstrateSeawallNode({ data, id }) {
   const params = data.parameters || {};
@@ -10,6 +11,13 @@ export default function SubstrateSeawallNode({ data, id }) {
     e.stopPropagation();
     if (data.onDeleteNode) {
       data.onDeleteNode(id);
+    }
+  };
+
+  const handleUnlink = (e) => {
+    e.stopPropagation();
+    if (data.onUnlinkNode) {
+      data.onUnlinkNode(id);
     }
   };
 
@@ -36,6 +44,25 @@ export default function SubstrateSeawallNode({ data, id }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} className="nodrag nopan">
           <span className="glass-pill" style={{ color: 'var(--accent-emerald)' }}>Eco-Block</span>
+          {data.onUnlinkNode && (
+            <button
+              onClick={handleUnlink}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-dim)',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '4px',
+                display: 'flex',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-cyan)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+              title="Unlink All Wires"
+            >
+              <Unlink2 size={14} />
+            </button>
+          )}
           {data.onDeleteNode && (
             <button
               onClick={handleDelete}
@@ -62,7 +89,10 @@ export default function SubstrateSeawallNode({ data, id }) {
         {/* Substrate Mount Mode */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Substrate Foundation</span>
+            <span>
+              Substrate Foundation
+              <ParamInfo paramKey="substrateType" />
+            </span>
             <span className="slider-value">{params.substrateType || 'seawall'}</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px' }}>

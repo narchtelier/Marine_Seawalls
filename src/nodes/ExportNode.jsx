@@ -1,6 +1,6 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Download, FileCode, CheckCircle, Package } from 'lucide-react';
+import { Download, FileCode, CheckCircle, Package, Unlink2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { exportGroupToOBJ, exportGroupToSTL, exportParametersJSON } from '../engine/exporters';
 
@@ -45,7 +45,28 @@ export default function ExportNode({ data }) {
             </div>
           </div>
         </div>
-        <span className="glass-pill" style={{ color: 'var(--accent-amber)' }}>Ready</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }} className="nodrag nopan">
+          <span className="glass-pill" style={{ color: 'var(--accent-amber)' }}>Ready</span>
+          {data.onUnlinkNode && (
+            <button
+              onClick={() => data.onUnlinkNode(data.id || 'node-export')}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-dim)',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '4px',
+                display: 'flex',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-cyan)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+              title="Unlink All Wires"
+            >
+              <Unlink2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="node-body">

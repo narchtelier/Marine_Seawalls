@@ -4,11 +4,11 @@ Marine_Seawalls is an advanced computational marine ecology and biomimetic engin
 
 ## Key Features
 
-- **Miro-Style Workflow Canvas**: Infinite-pan canvas powered by `@xyflow/react` with custom nodes, dynamic edge routing, minimap, and floating toolbars.
-- **Multiple Reference Image Pools**: Ingest and categorize independent reference specimen datasets (e.g., *Acropora*, *Platygyra*, *Porites*, *Turbinaria*) and custom photographic uploads.
-- **PyTorch Deep Learning Morphometry**: Deep neural network architecture with MobileNetV3 feature pyramids, 128D latent space projection, 2D Gabor wavelets, and Fourier power spectrum slope analysis for rugosity quantification.
+- **Miro-Style Workflow Canvas**: Infinite-pan canvas powered by `@xyflow/react` with custom nodes, dynamic edge routing, minimap, floating toolbars, wire cutting tool (scissors tool), and single-click node unlinking.
+- **Multiple Reference Image Pools & Species Taxonomy Parser**: Ingest and categorize independent reference specimen datasets (e.g., *Acropora*, *Platygyra*, *Porites*, *Turbinaria*). Enter any coral species/reef name to parse biological taxonomy and replace 3D geometry instantly with a customizable mesh fidelity slider (Ultra-HD $54^3$ voxel grid).
+- **PyTorch Deep Learning Morphometry**: Deep neural network architecture with MobileNetV3 feature pyramids, 128D latent space projection, 2D Gabor wavelets, Self-Organizing Map (SOM) visual feature mapping, and Fourier power spectrum slope analysis for rugosity quantification.
 - **Continuous 3D Morphology Synthesizer**: Real-time parameter augmentation and multi-specimen spherical latent space morphing ($n$-way blend sliders) with live 3D geometric deformation.
-- **Three.js WebGL 3D Viewport**: Real-time PBR rendering with subsurface scattering, orbit controls, wireframe inspections, and oceanic/bioluminescent lighting modes.
+- **High-Fidelity Three.js WebGL Viewports**: Real-time PBR rendering with aragonite micro-texture normal maps, differential roughness maps, ocean light caustics, and Fresnel subsurface translucent rim lighting.
 - **Seawall Substrate Integration**: Eco-engineering substrate matrix computing wave shear dissipation, larval recruitment cavity geometry, and tidal micro-pool retention.
 - **Production 3D Export**: Export synthesized coral meshes to `.OBJ` and `.STL` formats (for 3D printing onto seawalls) alongside JSON parameter matrices.
 

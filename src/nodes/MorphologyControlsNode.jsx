@@ -1,6 +1,7 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import { Sliders, Shuffle, GitMerge, Trash2, Cpu } from 'lucide-react';
+import { Sliders, Shuffle, GitMerge, Trash2, Cpu, Unlink2 } from 'lucide-react';
+import ParamInfo from '../components/ParamInfo';
 
 export default function MorphologyControlsNode({ data, id }) {
   const params = data.parameters || {};
@@ -72,6 +73,25 @@ export default function MorphologyControlsNode({ data, id }) {
           >
             <Shuffle size={12} /> Jitter
           </button>
+          {data.onUnlinkNode && (
+            <button
+              onClick={() => data.onUnlinkNode(id)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-dim)',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '4px',
+                display: 'flex',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-cyan)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+              title="Unlink All Wires from this Node"
+            >
+              <Unlink2 size={14} />
+            </button>
+          )}
           {data.onDeleteNode && (
             <button
               onClick={handleDelete}
@@ -190,7 +210,10 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Morphology Class Selector */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Dominant Archetype</span>
+            <span>
+              Dominant Archetype
+              <ParamInfo paramKey="morphologyType" />
+            </span>
             <span className="slider-value" style={{ textTransform: 'uppercase' }}>
               {params.morphologyType || 'branching'}
             </span>
@@ -226,7 +249,10 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Branching Factor Slider */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Branching Factor (Arborescent Bifurcation)</span>
+            <span>
+              Branching Factor (Arborescent Bifurcation)
+              <ParamInfo paramKey="branchingFactor" />
+            </span>
             <span className="slider-value">{(params.branchingFactor || 0.8).toFixed(2)}</span>
           </div>
           <input
@@ -243,7 +269,10 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Rugosity Slider */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Surface Rugosity & Wavelet Noise</span>
+            <span>
+              Surface Rugosity & Wavelet Noise
+              <ParamInfo paramKey="rugosity" />
+            </span>
             <span className="slider-value">{(params.rugosity || 0.6).toFixed(2)}</span>
           </div>
           <input
@@ -260,7 +289,10 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Calice Density */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Corallite Calice Pore Density</span>
+            <span>
+              Corallite Calice Pore Density
+              <ParamInfo paramKey="caliceDensity" />
+            </span>
             <span className="slider-value">{(params.caliceDensity || 0.5).toFixed(2)}</span>
           </div>
           <input
@@ -277,7 +309,10 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Meandering Frequency (Brain Corals) */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Meandroid Sinuosity & Valleys</span>
+            <span>
+              Meandroid Sinuosity & Valleys
+              <ParamInfo paramKey="meanderingFreq" />
+            </span>
             <span className="slider-value">{(params.meanderingFreq || 0.2).toFixed(2)}</span>
           </div>
           <input
@@ -294,7 +329,10 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Fractal Dimension */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Fractal Dimension D (Tortuosity)</span>
+            <span>
+              Fractal Dimension D (Tortuosity)
+              <ParamInfo paramKey="fractalDimension" />
+            </span>
             <span className="slider-value">{(params.fractalDimension || 1.7).toFixed(2)}</span>
           </div>
           <input
@@ -311,7 +349,10 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Growth Scale Matrix */}
         <div className="slider-group">
           <div className="slider-label-row">
-            <span>Colony Growth Scale</span>
+            <span>
+              Colony Growth Scale
+              <ParamInfo paramKey="growthScale" />
+            </span>
             <span className="slider-value">{(params.growthScale || 1.0).toFixed(2)}x</span>
           </div>
           <input
@@ -328,8 +369,9 @@ export default function MorphologyControlsNode({ data, id }) {
         {/* Color Palette Controls */}
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', paddingTop: '4px' }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Primary Albedo
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center' }}>
+              <span>Primary Albedo</span>
+              <ParamInfo paramKey="primaryColor" />
             </div>
             <input
               type="color"
@@ -347,8 +389,9 @@ export default function MorphologyControlsNode({ data, id }) {
             />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>
-              Polyp Fluorescence
+            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center' }}>
+              <span>Polyp Fluorescence</span>
+              <ParamInfo paramKey="tentacleGlow" />
             </div>
             <input
               type="color"

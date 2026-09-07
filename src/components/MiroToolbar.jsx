@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   MousePointer,
   Hand,
+  Scissors,
   Plus,
   ZoomIn,
   ZoomOut,
@@ -50,6 +51,16 @@ export default function MiroToolbar({
       >
         <Hand size={18} />
         <span className="tooltip">Pan Canvas (H)</span>
+      </button>
+
+      {/* Wire Cutting Scissors Mode */}
+      <button
+        className={`miro-tool-btn ${activeTool === 'cut' ? 'active' : ''}`}
+        onClick={() => setActiveTool(activeTool === 'cut' ? 'select' : 'cut')}
+        style={activeTool === 'cut' ? { background: 'rgba(244, 63, 94, 0.25)', color: '#f43f5e', borderColor: 'rgba(244, 63, 94, 0.5)' } : {}}
+      >
+        <Scissors size={18} />
+        <span className="tooltip">Cut Wires / Disconnect (C)</span>
       </button>
 
       {/* Add Node Menu */}

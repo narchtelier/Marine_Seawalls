@@ -21,6 +21,7 @@ import MorphologyControlsNode from './nodes/MorphologyControlsNode';
 import ThreeViewportNode from './nodes/ThreeViewportNode';
 import SubstrateSeawallNode from './nodes/SubstrateSeawallNode';
 import ExportNode from './nodes/ExportNode';
+import DeletableEdge from './components/DeletableEdge';
 
 import { DEFAULT_CORAL_PRESETS } from './engine/defaultCorals';
 import { analyzeCoralImage } from './engine/imageAnalysis';
@@ -32,6 +33,10 @@ const nodeTypes = {
   threeViewport: ThreeViewportNode,
   substrateSeawall: SubstrateSeawallNode,
   exportNode: ExportNode,
+};
+
+const edgeTypes = {
+  default: DeletableEdge,
 };
 
 function FlowApp() {
@@ -216,8 +221,10 @@ function FlowApp() {
         } else {
           try {
             extracted = await analyzeCoralImage(imageObj.previewUrl);
+            imageObj.features = extracted;
           } catch (e) {
             extracted = DEFAULT_CORAL_PRESETS[0].features;
+            imageObj.features = extracted;
           }
         }
 
@@ -264,6 +271,30 @@ function FlowApp() {
     }
   }, [handleSelectPoolImage]);
 
+  // Handle edge delete / wire cut
+  const handleDeleteEdge = useCallback((edgeId) => {
+    setEdges((eds) => {
+      const remainingEdges = eds.filter((e) => e.id !== edgeId);
+      setNodes((nds) => {
+        recomputeSynthesis(nds, remainingEdges, synthesizerWeights);
+        return nds;
+      });
+      return remainingEdges;
+    });
+  }, [recomputeSynthesis, synthesizerWeights]);
+
+  // Handle unlinking all connections for a specific node
+  const handleUnlinkNode = useCallback((nodeId) => {
+    setEdges((eds) => {
+      const remainingEdges = eds.filter((e) => e.source !== nodeId && e.target !== nodeId);
+      setNodes((nds) => {
+        recomputeSynthesis(nds, remainingEdges, synthesizerWeights);
+        return nds;
+      });
+      return remainingEdges;
+    });
+  }, [recomputeSynthesis, synthesizerWeights]);
+
   // Handle node delete
   const handleDeleteNode = useCallback((nodeId) => {
     setNodes((nds) => nds.filter((n) => n.id !== nodeId));
@@ -296,6 +327,7 @@ function FlowApp() {
           onSelectImage: handleSelectPoolImage,
           onAddImages: handleAddPoolImages,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -320,6 +352,7 @@ function FlowApp() {
           onSelectImage: handleSelectPoolImage,
           onAddImages: handleAddPoolImages,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -331,6 +364,7 @@ function FlowApp() {
           specimenName: pB.name,
           features: pB.features,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -350,6 +384,7 @@ function FlowApp() {
           onSetDualWeights: handleSetDualWeights,
           onRandomize: handleRandomize,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -360,6 +395,7 @@ function FlowApp() {
           parameters: synthesizedParams,
           onCoralMeshReady: setCoralMesh,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -370,6 +406,7 @@ function FlowApp() {
           parameters: synthesizedParams,
           onUpdateParameter: handleUpdateParameter,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -380,6 +417,7 @@ function FlowApp() {
           coralMesh,
           parameters: synthesizedParams,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
     ];
@@ -401,6 +439,7 @@ function FlowApp() {
     handleSelectPoolImage,
     handleAddPoolImages,
     handleDeleteNode,
+    handleUnlinkNode,
     handleUpdateParameter,
     handleUpdateWeights,
     handleSetDualWeights,
@@ -455,6 +494,7 @@ function FlowApp() {
         onSelectImage: handleSelectPoolImage,
         onAddImages: handleAddPoolImages,
         onDeleteNode: handleDeleteNode,
+        onUnlinkNode: handleUnlinkNode,
         onUpdateParameter: handleUpdateParameter,
         onUpdateWeights: handleUpdateWeights,
         onSetDualWeights: handleSetDualWeights,
@@ -469,6 +509,7 @@ function FlowApp() {
     handleSelectPoolImage,
     handleAddPoolImages,
     handleDeleteNode,
+    handleUnlinkNode,
     handleUpdateParameter,
     handleUpdateWeights,
     handleSetDualWeights,
@@ -506,6 +547,7 @@ function FlowApp() {
           onSelectImage: handleSelectPoolImage,
           onAddImages: handleAddPoolImages,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -517,6 +559,7 @@ function FlowApp() {
           specimenName: pA.name,
           features: pA.features,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -530,6 +573,7 @@ function FlowApp() {
           onSelectImage: handleSelectPoolImage,
           onAddImages: handleAddPoolImages,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -541,6 +585,7 @@ function FlowApp() {
           specimenName: pB.name,
           features: pB.features,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -554,6 +599,7 @@ function FlowApp() {
           onSelectImage: handleSelectPoolImage,
           onAddImages: handleAddPoolImages,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -565,6 +611,7 @@ function FlowApp() {
           specimenName: pC.name,
           features: pC.features,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -585,6 +632,7 @@ function FlowApp() {
           onSetDualWeights: handleSetDualWeights,
           onRandomize: handleRandomize,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -595,6 +643,7 @@ function FlowApp() {
           parameters: synthesizedParams,
           onCoralMeshReady: setCoralMesh,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -605,6 +654,7 @@ function FlowApp() {
           parameters: synthesizedParams,
           onUpdateParameter: handleUpdateParameter,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
       {
@@ -615,6 +665,7 @@ function FlowApp() {
           coralMesh,
           parameters: synthesizedParams,
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
         },
       },
     ];
@@ -635,6 +686,45 @@ function FlowApp() {
     setEdges(tripleEdges);
     setTimeout(() => fitView({ padding: 0.15, duration: 500 }), 50);
   };
+
+  // Memoize rendered edges with wire cutting deletion callbacks and cut mode state
+  const renderedEdges = useMemo(() => {
+    return edges.map((e) => ({
+      ...e,
+      data: {
+        ...e.data,
+        onDeleteEdge: handleDeleteEdge,
+        isCutMode: activeTool === 'cut',
+      },
+    }));
+  }, [edges, handleDeleteEdge, activeTool]);
+
+  // Handle edge click in cut mode
+  const onEdgeClick = useCallback(
+    (evt, edge) => {
+      if (activeTool === 'cut') {
+        evt.stopPropagation();
+        handleDeleteEdge(edge.id);
+      }
+    },
+    [activeTool, handleDeleteEdge]
+  );
+
+  // Handle keyboard Delete / Backspace edge deletion
+  const onEdgesDelete = useCallback(
+    (deletedEdges) => {
+      const deletedIds = new Set(deletedEdges.map((e) => e.id));
+      setEdges((eds) => {
+        const remainingEdges = eds.filter((e) => !deletedIds.has(e.id));
+        setNodes((nds) => {
+          recomputeSynthesis(nds, remainingEdges, synthesizerWeights);
+          return nds;
+        });
+        return remainingEdges;
+      });
+    },
+    [recomputeSynthesis, synthesizerWeights]
+  );
 
   return (
     <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -661,11 +751,14 @@ function FlowApp() {
 
         <ReactFlow
           nodes={nodes}
-          edges={edges}
+          edges={renderedEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onEdgeClick={onEdgeClick}
+          onEdgesDelete={onEdgesDelete}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           panOnDrag={activeTool === 'hand' || [1, 2]}
           selectionOnDrag={activeTool === 'select'}

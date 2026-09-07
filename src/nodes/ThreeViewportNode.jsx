@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import * as THREE from 'three';
-import { Box, Maximize2, Minimize2, Eye, Sun, Moon, RotateCw, Sparkles, Layers } from 'lucide-react';
+import { Box, Maximize2, Minimize2, Eye, Sun, Moon, RotateCw, RotateCcw, Sparkles, Layers, Unlink2, Trash2 } from 'lucide-react';
 import { createProceduralCoral } from '../engine/coralGenerators';
 
 export default function ThreeViewportNode({ data }) {
@@ -19,12 +19,12 @@ export default function ThreeViewportNode({ data }) {
 
   const params = data.parameters || {};
 
-  // Setup Three.js Scene
+  // Setup Three.js Scene once on mount
   useEffect(() => {
     if (!containerRef.current) return;
 
     const width = containerRef.current.clientWidth || 380;
-    const height = isFullscreen ? window.innerHeight - 100 : 280;
+    const height = 260;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(lightingPreset === 'biolum' ? '#030712' : '#070d18');
@@ -45,17 +45,21 @@ export default function ThreeViewportNode({ data }) {
     containerRef.current.appendChild(renderer.domElement);
 
     // Setup Lighting
-    const ambientLight = new THREE.AmbientLight(
-      lightingPreset === 'biolum' ? '#0e3a53' : '#38bdf8',
-      lightingPreset === 'biolum' ? 0.8 : 1.2
-    );
+    const ambientLight = new THREE.AmbientLight('#38bdf8', 1.2);
+    ambientLight.name = 'ambientLight';
     scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight('#ffffff', 1.8);
     dirLight.position.set(5, 8, 5);
     scene.add(dirLight);
 
-    const pointLight = new THREE.PointLight(params.tentacleGlow || '#38bdf8', 2.0, 10);
+    // Rim backlight for Fresnel subsurface translucency
+    const rimLight = new THREE.DirectionalLight(params.tentacleGlow || '#38bdf8', 1.5);
+    rimLight.name = 'rimLight';
+    rimLight.position.set(-6, 5, -6);
+    scene.add(rimLight);
+
+    const pointLight = new THREE.PointLight(params.tentacleGlow || '#38bdf8', 2.2, 12);
     pointLight.position.set(0, 1.5, 0);
     scene.add(pointLight);
 
@@ -64,30 +68,56 @@ export default function ThreeViewportNode({ data }) {
     grid.position.y = -0.21;
     scene.add(grid);
 
-    // Interaction Controls (Manual Pointer Dragging)
+    // Interaction Controls (Manual Pointer Dragging + Panning)
     let isDragging = false;
+    let dragMode = 'orbit'; // 'orbit' | 'pan'
     let prevMouse = { x: 0, y: 0 };
     let spherical = { radius: 5.5, theta: 0.8, phi: 1.1 };
+    let target = new THREE.Vector3(0, 0.8, 0);
 
     const updateCamera = () => {
-      camera.position.x = spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
-      camera.position.y = spherical.radius * Math.cos(spherical.phi) + 0.8;
-      camera.position.z = spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
-      camera.lookAt(0, 0.8, 0);
+      camera.position.x = target.x + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+      camera.position.y = target.y + spherical.radius * Math.cos(spherical.phi);
+      camera.position.z = target.z + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+      camera.lookAt(target);
     };
 
     const dom = renderer.domElement;
+    
+    // Prevent default context menu on right click to allow smooth right-click panning
+    const onContextMenu = (e) => e.preventDefault();
+
     const onMouseDown = (e) => {
       isDragging = true;
       prevMouse = { x: e.clientX, y: e.clientY };
+      // Right click (button 2) or Shift + Left click -> Pan mode
+      if (e.button === 2 || e.button === 1 || e.shiftKey) {
+        dragMode = 'pan';
+      } else {
+        dragMode = 'orbit';
+      }
     };
 
     const onMouseMove = (e) => {
       if (!isDragging) return;
       const dx = e.clientX - prevMouse.x;
       const dy = e.clientY - prevMouse.y;
-      spherical.theta -= dx * 0.01;
-      spherical.phi = Math.max(0.2, Math.min(Math.PI / 2 + 0.1, spherical.phi - dy * 0.01));
+
+      if (dragMode === 'pan') {
+        // Compute camera view orientation vectors for accurate screen-space panning
+        const forward = new THREE.Vector3().subVectors(camera.position, target).normalize();
+        const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
+        const up = new THREE.Vector3().crossVectors(forward, right).normalize();
+
+        const panSpeed = (spherical.radius / 700);
+        target.addScaledVector(right, -dx * panSpeed);
+        target.addScaledVector(up, dy * panSpeed);
+      } else {
+        // Orbit mode
+        spherical.theta -= dx * 0.01;
+        spherical.phi = Math.max(0.1, Math.min(Math.PI / 2 + 0.2, spherical.phi - dy * 0.01));
+      }
+
       prevMouse = { x: e.clientX, y: e.clientY };
       updateCamera();
     };
@@ -98,14 +128,22 @@ export default function ThreeViewportNode({ data }) {
 
     const onWheel = (e) => {
       e.preventDefault();
-      spherical.radius = Math.max(2.5, Math.min(10, spherical.radius + e.deltaY * 0.005));
+      spherical.radius = Math.max(1.5, Math.min(14, spherical.radius + e.deltaY * 0.005));
       updateCamera();
     };
 
+    dom.addEventListener('contextmenu', onContextMenu);
     dom.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
     dom.addEventListener('wheel', onWheel, { passive: false });
+
+    // Expose reset view function to node ref
+    containerRef.current.resetView = () => {
+      spherical = { radius: 5.5, theta: 0.8, phi: 1.1 };
+      target = new THREE.Vector3(0, 0.8, 0);
+      updateCamera();
+    };
 
     // Animation Loop
     let clock = new THREE.Clock();
@@ -123,13 +161,38 @@ export default function ThreeViewportNode({ data }) {
 
     return () => {
       cancelAnimationFrame(animFrameRef.current);
+      dom.removeEventListener('contextmenu', onContextMenu);
       dom.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
       dom.removeEventListener('wheel', onWheel);
       renderer.dispose();
     };
-  }, [lightingPreset, isFullscreen]);
+  }, []);
+
+  // Update lighting preset dynamically
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    sceneRef.current.background = new THREE.Color(lightingPreset === 'biolum' ? '#030712' : '#070d18');
+    const amb = sceneRef.current.getObjectByName('ambientLight');
+    if (amb) {
+      amb.color.set(lightingPreset === 'biolum' ? '#0e3a53' : '#38bdf8');
+      amb.intensity = lightingPreset === 'biolum' ? 0.8 : 1.2;
+    }
+  }, [lightingPreset]);
+
+  // Handle resize when isFullscreen changes
+  useEffect(() => {
+    if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
+    const timer = setTimeout(() => {
+      const w = containerRef.current.clientWidth || 380;
+      const h = isFullscreen ? 420 : 260;
+      rendererRef.current.setSize(w, h);
+      cameraRef.current.aspect = w / h;
+      cameraRef.current.updateProjectionMatrix();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [isFullscreen]);
 
   // Re-generate Procedural Coral on Parameter Change
   useEffect(() => {
@@ -199,6 +262,18 @@ export default function ThreeViewportNode({ data }) {
 
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button
+            onClick={() => {
+              if (containerRef.current?.resetView) {
+                containerRef.current.resetView();
+              }
+            }}
+            className="btn-secondary"
+            style={{ padding: '4px 6px', fontSize: '11px' }}
+            title="Reset Camera & Pan Center"
+          >
+            <RotateCcw size={13} />
+          </button>
+          <button
             onClick={() => setAutoRotate(!autoRotate)}
             className={`btn-secondary ${autoRotate ? 'active' : ''}`}
             style={{ padding: '4px 6px', fontSize: '11px' }}
@@ -230,6 +305,30 @@ export default function ThreeViewportNode({ data }) {
           >
             {isFullscreen ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
           </button>
+          {data.onUnlinkNode && (
+            <button
+              onClick={() => data.onUnlinkNode(data.id || 'node-three-viewport')}
+              className="btn-secondary"
+              style={{ padding: '4px 6px', fontSize: '11px', color: 'var(--text-dim)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-cyan)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+              title="Unlink All Wires from this Viewport"
+            >
+              <Unlink2 size={13} />
+            </button>
+          )}
+          {data.onDeleteNode && (
+            <button
+              onClick={() => data.onDeleteNode(data.id || 'node-three-viewport')}
+              className="btn-secondary"
+              style={{ padding: '4px 6px', fontSize: '11px', color: 'var(--text-dim)' }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-coral)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
+              title="Delete Viewport Node"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -247,8 +346,8 @@ export default function ThreeViewportNode({ data }) {
           }}
         />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
-          <span>Drag to Orbit • Scroll to Zoom</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>
+          <span>Left Drag: <b>Orbit</b> • Right/Shift Drag: <b>Pan</b> • Wheel: <b>Zoom</b></span>
           <span style={{ color: 'var(--accent-cyan)' }}>60 FPS Realtime</span>
         </div>
       </div>
