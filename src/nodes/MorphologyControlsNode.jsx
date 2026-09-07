@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Sliders, Shuffle, GitMerge, Trash2, Cpu, Unlink2 } from 'lucide-react';
 import ParamInfo from '../components/ParamInfo';
@@ -9,7 +9,7 @@ export default function MorphologyControlsNode({ data, id }) {
   const connectedInputs = data.connectedExtractors || [];
   const inputWeights = data.inputWeights || {};
   const nodeLabel = data.label || '3. Morphology Parameter Synthesizer';
-
+  
   const handleChange = (key, val) => {
     onChange(key, val);
   };
