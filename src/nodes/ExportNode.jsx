@@ -2,11 +2,21 @@ import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Download, FileCode, CheckCircle, Package, Unlink2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import * as THREE from 'three';
 import { exportGroupToOBJ, exportGroupToSTL, exportParametersJSON } from '../engine/exporters';
 
 export default function ExportNode({ data }) {
-  const meshGroup = data.coralMesh;
+  let meshGroup = data.coralMesh || data.reconstructedMesh;
   const params = data.parameters || {};
+
+  // Wrap BufferGeometry into Three.js Mesh / Group if needed
+  if (!meshGroup && data.geometry) {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x38bdf8 });
+    const mesh = new THREE.Mesh(data.geometry, mat);
+    const grp = new THREE.Group();
+    grp.add(mesh);
+    meshGroup = grp;
+  }
 
   const handleExportOBJ = () => {
     if (!meshGroup) return;
@@ -25,12 +35,12 @@ export default function ExportNode({ data }) {
   };
 
   return (
-    <div className="coral-node" style={{ minWidth: '320px' }}>
+    <div className="coral-node" style={{ minWidth: '320px', borderColor: 'rgba(245, 158, 11, 0.4)' }}>
       <Handle
         type="target"
         position={Position.Left}
         id="export-in"
-        style={{ top: '50%' }}
+        style={{ top: '50%', background: '#fbbf24', width: '10px', height: '10px', border: '2px solid #0f172a' }}
       />
 
       <div className="node-header">
@@ -39,7 +49,7 @@ export default function ExportNode({ data }) {
             <Download size={18} />
           </div>
           <div>
-            <div className="node-title">6. Morphology Exporter</div>
+            <div className="node-title">6. Production Exporter</div>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
               CAD / 3D Print / Parameter Matrices
             </div>
@@ -74,7 +84,7 @@ export default function ExportNode({ data }) {
           onClick={handleExportOBJ}
           disabled={!meshGroup}
           className="btn-primary"
-          style={{ width: '100%' }}
+          style={{ width: '100%', background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', fontWeight: 700 }}
         >
           <Package size={15} /> Export 3D Mesh (.OBJ)
         </button>
@@ -83,7 +93,7 @@ export default function ExportNode({ data }) {
           onClick={handleExportSTL}
           disabled={!meshGroup}
           className="btn-secondary"
-          style={{ width: '100%', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24' }}
+          style={{ width: '100%', borderColor: 'rgba(245, 158, 11, 0.4)', color: '#fbbf24', fontWeight: 600 }}
         >
           <Download size={15} /> Export 3D Print (.STL)
         </button>

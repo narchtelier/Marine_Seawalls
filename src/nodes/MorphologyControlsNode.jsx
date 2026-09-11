@@ -163,6 +163,9 @@ export default function MorphologyControlsNode({ data, id }) {
                   max="1"
                   step="0.01"
                   className="nodrag nopan"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
                   value={inputWeights[connectedInputs[1].id] !== undefined ? inputWeights[connectedInputs[1].id] : 0.5}
                   onChange={(e) => {
                     const w2 = parseFloat(e.target.value);
@@ -197,6 +200,9 @@ export default function MorphologyControlsNode({ data, id }) {
                       max="1"
                       step="0.02"
                       className="nodrag nopan"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
                       value={weight}
                       onChange={(e) => handleWeightChange(input.id, parseFloat(e.target.value))}
                     />
@@ -261,6 +267,9 @@ export default function MorphologyControlsNode({ data, id }) {
             max="1.0"
             step="0.01"
             className="nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             value={params.branchingFactor || 0.8}
             onChange={(e) => handleChange('branchingFactor', parseFloat(e.target.value))}
           />
@@ -281,6 +290,9 @@ export default function MorphologyControlsNode({ data, id }) {
             max="1.0"
             step="0.01"
             className="nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             value={params.rugosity || 0.6}
             onChange={(e) => handleChange('rugosity', parseFloat(e.target.value))}
           />
@@ -301,6 +313,9 @@ export default function MorphologyControlsNode({ data, id }) {
             max="1.0"
             step="0.01"
             className="nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             value={params.caliceDensity || 0.5}
             onChange={(e) => handleChange('caliceDensity', parseFloat(e.target.value))}
           />
@@ -321,6 +336,9 @@ export default function MorphologyControlsNode({ data, id }) {
             max="1.0"
             step="0.01"
             className="nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             value={params.meanderingFreq || 0.2}
             onChange={(e) => handleChange('meanderingFreq', parseFloat(e.target.value))}
           />
@@ -341,6 +359,9 @@ export default function MorphologyControlsNode({ data, id }) {
             max="2.0"
             step="0.02"
             className="nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             value={params.fractalDimension || 1.7}
             onChange={(e) => handleChange('fractalDimension', parseFloat(e.target.value))}
           />
@@ -361,6 +382,9 @@ export default function MorphologyControlsNode({ data, id }) {
             max="1.8"
             step="0.05"
             className="nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
             value={params.growthScale || 1.0}
             onChange={(e) => handleChange('growthScale', parseFloat(e.target.value))}
           />

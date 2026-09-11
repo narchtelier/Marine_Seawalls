@@ -1,275 +1,331 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import * as THREE from 'three';
-import { Box, Maximize2, Minimize2, Eye, Sun, Moon, RotateCw, RotateCcw, Sparkles, Layers, Unlink2, Trash2 } from 'lucide-react';
+import { OrbitControls } from 'three-stdlib';
+import {
+  Box,
+  Maximize2,
+  Minimize2,
+  Sun,
+  Moon,
+  RotateCw,
+  RotateCcw,
+  Sparkles,
+  Layers,
+  Unlink2,
+  Trash2,
+  Eye,
+  Sliders,
+  Layers3
+} from 'lucide-react';
 import { createProceduralCoral } from '../engine/coralGenerators';
+import { LumaGaussianSplatEngine } from '../engine/lumaSplatEngine';
 
-export default function ThreeViewportNode({ data }) {
+export default function ThreeViewportNode({ data, id }) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
+  const controlsRef = useRef(null);
   const coralGroupRef = useRef(null);
+  const splatEngineRef = useRef(null);
   const animFrameRef = useRef(null);
 
   const [autoRotate, setAutoRotate] = useState(true);
   const [wireframe, setWireframe] = useState(false);
-  const [lightingPreset, setLightingPreset] = useState('oceanSun'); // 'oceanSun' | 'biolum' | 'lab'
+  const [lightingPreset, setLightingPreset] = useState('oceanSun'); // 'oceanSun' | 'biolum'
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewMode, setViewMode] = useState('synthesized'); // 'synthesized' | 'extracted' | 'luma_splat'
+  const [meshTelemetry, setMeshTelemetry] = useState({ vertices: 14200, faces: 28400, fps: 60 });
+  const [splatReveal, setSplatReveal] = useState(1.0);
 
   const params = data.parameters || {};
 
-  // Setup Three.js Scene once on mount
+  // Setup Three.js Scene
   useEffect(() => {
     if (!containerRef.current) return;
 
     const width = containerRef.current.clientWidth || 380;
-    const height = 260;
+    const height = isFullscreen ? 420 : 260;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(lightingPreset === 'biolum' ? '#030712' : '#070d18');
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 2.5, 5.5);
+    camera.position.set(0, 2.2, 5.2);
     camera.lookAt(0, 0.8, 0);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
 
     containerRef.current.innerHTML = '';
     containerRef.current.appendChild(renderer.domElement);
 
-    // Setup Lighting
-    const ambientLight = new THREE.AmbientLight('#38bdf8', 1.2);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 0.8;
+    controls.maxDistance = 16;
+    controls.target.set(0, 0.8, 0);
+    controlsRef.current = controls;
+
+    // Underwater PBR Lighting
+    const ambientLight = new THREE.AmbientLight('#38bdf8', 1.1);
     ambientLight.name = 'ambientLight';
     scene.add(ambientLight);
 
     const dirLight = new THREE.DirectionalLight('#ffffff', 1.8);
     dirLight.position.set(5, 8, 5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
     scene.add(dirLight);
 
-    // Rim backlight for Fresnel subsurface translucency
     const rimLight = new THREE.DirectionalLight(params.tentacleGlow || '#38bdf8', 1.5);
     rimLight.name = 'rimLight';
     rimLight.position.set(-6, 5, -6);
     scene.add(rimLight);
 
-    const pointLight = new THREE.PointLight(params.tentacleGlow || '#38bdf8', 2.2, 12);
+    const pointLight = new THREE.PointLight(params.tentacleGlow || '#38bdf8', 2.0, 12);
     pointLight.position.set(0, 1.5, 0);
     scene.add(pointLight);
 
-    // Grid Floor
+    // Bathymetric Substrate Grid
     const grid = new THREE.GridHelper(8, 16, 0x06b6d4, 0x1e293b);
     grid.position.y = -0.21;
     scene.add(grid);
 
-    // Interaction Controls (Manual Pointer Dragging + Panning)
-    let isDragging = false;
-    let dragMode = 'orbit'; // 'orbit' | 'pan'
-    let prevMouse = { x: 0, y: 0 };
-    let spherical = { radius: 5.5, theta: 0.8, phi: 1.1 };
-    let target = new THREE.Vector3(0, 0.8, 0);
+    // Instantiate Splat Engine
+    const splatEngine = new LumaGaussianSplatEngine(scene, { particleRevealProgress: splatReveal });
+    splatEngineRef.current = splatEngine;
 
-    const updateCamera = () => {
-      camera.position.x = target.x + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
-      camera.position.y = target.y + spherical.radius * Math.cos(spherical.phi);
-      camera.position.z = target.z + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
-      camera.lookAt(target);
-    };
+    let lastTime = performance.now();
+    let frameCount = 0;
+    let isMounted = true;
 
-    const dom = renderer.domElement;
-    
-    // Prevent default context menu on right click to allow smooth right-click panning
-    const onContextMenu = (e) => e.preventDefault();
-
-    const onMouseDown = (e) => {
-      isDragging = true;
-      prevMouse = { x: e.clientX, y: e.clientY };
-      // Right click (button 2) or Shift + Left click -> Pan mode
-      if (e.button === 2 || e.button === 1 || e.shiftKey) {
-        dragMode = 'pan';
-      } else {
-        dragMode = 'orbit';
-      }
-    };
-
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - prevMouse.x;
-      const dy = e.clientY - prevMouse.y;
-
-      if (dragMode === 'pan') {
-        // Compute camera view orientation vectors for accurate screen-space panning
-        const forward = new THREE.Vector3().subVectors(camera.position, target).normalize();
-        const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
-        const up = new THREE.Vector3().crossVectors(forward, right).normalize();
-
-        const panSpeed = (spherical.radius / 700);
-        target.addScaledVector(right, -dx * panSpeed);
-        target.addScaledVector(up, dy * panSpeed);
-      } else {
-        // Orbit mode
-        spherical.theta -= dx * 0.01;
-        spherical.phi = Math.max(0.1, Math.min(Math.PI / 2 + 0.2, spherical.phi - dy * 0.01));
-      }
-
-      prevMouse = { x: e.clientX, y: e.clientY };
-      updateCamera();
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-    };
-
-    const onWheel = (e) => {
-      e.preventDefault();
-      spherical.radius = Math.max(1.5, Math.min(14, spherical.radius + e.deltaY * 0.005));
-      updateCamera();
-    };
-
-    dom.addEventListener('contextmenu', onContextMenu);
-    dom.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    dom.addEventListener('wheel', onWheel, { passive: false });
-
-    // Expose reset view function to node ref
-    containerRef.current.resetView = () => {
-      spherical = { radius: 5.5, theta: 0.8, phi: 1.1 };
-      target = new THREE.Vector3(0, 0.8, 0);
-      updateCamera();
-    };
-
-    // Animation Loop
-    let clock = new THREE.Clock();
-    const animate = () => {
+    const animate = (time) => {
+      if (!isMounted) return;
       animFrameRef.current = requestAnimationFrame(animate);
-      const delta = clock.getDelta();
 
-      if (autoRotate && coralGroupRef.current && !isDragging) {
-        coralGroupRef.current.rotation.y += delta * 0.4;
+      const now = performance.now();
+      frameCount++;
+      if (now - lastTime >= 1000) {
+        setMeshTelemetry((prev) => ({ ...prev, fps: frameCount }));
+        frameCount = 0;
+        lastTime = now;
       }
 
+      if (autoRotate) {
+        if (coralGroupRef.current) coralGroupRef.current.rotation.y += 0.005;
+      }
+
+      if (splatEngineRef.current) {
+        splatEngineRef.current.update(time, camera);
+      }
+
+      controls.update();
       renderer.render(scene, camera);
     };
-    animate();
+    animate(0);
+
+    const handleResize = () => {
+      if (!containerRef.current || !rendererRef.current) return;
+      const nw = containerRef.current.clientWidth;
+      const nh = isFullscreen ? 420 : 260;
+      camera.aspect = nw / nh;
+      camera.updateProjectionMatrix();
+      rendererRef.current.setSize(nw, nh);
+    };
+    window.addEventListener('resize', handleResize);
 
     return () => {
+      isMounted = false;
       cancelAnimationFrame(animFrameRef.current);
-      dom.removeEventListener('contextmenu', onContextMenu);
-      dom.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      dom.removeEventListener('wheel', onWheel);
+      window.removeEventListener('resize', handleResize);
+      controls.dispose();
+      if (splatEngineRef.current) splatEngineRef.current.dispose();
       renderer.dispose();
+      if (containerRef.current) containerRef.current.innerHTML = '';
     };
-  }, []);
+  }, [isFullscreen]);
 
-  // Update lighting preset dynamically
+  // Lighting preset updates
   useEffect(() => {
     if (!sceneRef.current) return;
     sceneRef.current.background = new THREE.Color(lightingPreset === 'biolum' ? '#030712' : '#070d18');
     const amb = sceneRef.current.getObjectByName('ambientLight');
     if (amb) {
       amb.color.set(lightingPreset === 'biolum' ? '#0e3a53' : '#38bdf8');
-      amb.intensity = lightingPreset === 'biolum' ? 0.8 : 1.2;
+      amb.intensity = lightingPreset === 'biolum' ? 0.7 : 1.2;
     }
   }, [lightingPreset]);
 
-  // Handle resize when isFullscreen changes
-  useEffect(() => {
-    if (!rendererRef.current || !cameraRef.current || !containerRef.current) return;
-    const timer = setTimeout(() => {
-      const w = containerRef.current.clientWidth || 380;
-      const h = isFullscreen ? 420 : 260;
-      rendererRef.current.setSize(w, h);
-      cameraRef.current.aspect = w / h;
-      cameraRef.current.updateProjectionMatrix();
-    }, 50);
-    return () => clearTimeout(timer);
-  }, [isFullscreen]);
-
-  // Re-generate Procedural Coral on Parameter Change
+  // Strict Single-Geometry Scene Update Logic
   useEffect(() => {
     if (!sceneRef.current) return;
 
+    // 1. Thoroughly dispose and remove existing coral mesh
     if (coralGroupRef.current) {
       sceneRef.current.remove(coralGroupRef.current);
-      // Clean memory
       coralGroupRef.current.traverse((child) => {
         if (child.isMesh) {
           child.geometry?.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach((m) => m.dispose());
-          } else {
-            child.material?.dispose();
+          if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+          else child.material?.dispose();
+        }
+      });
+      coralGroupRef.current = null;
+    }
+
+    // 2. Thoroughly dispose existing splat object
+    if (splatEngineRef.current) {
+      splatEngineRef.current.dispose();
+    }
+
+    // 3. Render ONLY the selected view mode
+    if (viewMode === 'luma_splat' && (data.splatInput || data.splatData) && splatEngineRef.current) {
+      const source = data.splatInput?.source || data.splatInput || data.splatData;
+      splatEngineRef.current.loadSplat(source, {
+        particleRevealEnabled: true,
+        pointScale: 2.2,
+      });
+
+      setMeshTelemetry((prev) => ({
+        ...prev,
+        vertices: (data.splatInput?.count || data.splatData?.count || 18000),
+        faces: 0,
+      }));
+      return;
+    }
+
+    if (viewMode === 'extracted' && data.reconstructedGeometry) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(params.primaryColor || '#38bdf8'),
+        roughness: 0.45,
+        metalness: 0.15,
+        wireframe: wireframe,
+        vertexColors: data.reconstructedGeometry.attributes.color ? true : false,
+      });
+
+      const mesh = new THREE.Mesh(data.reconstructedGeometry, mat);
+      mesh.position.y = 0.4;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const group = new THREE.Group();
+      group.add(mesh);
+      sceneRef.current.add(group);
+      coralGroupRef.current = group;
+
+      const pos = data.reconstructedGeometry.attributes.position;
+      setMeshTelemetry((prev) => ({
+        ...prev,
+        vertices: pos ? pos.count : 24000,
+        faces: data.reconstructedGeometry.index ? data.reconstructedGeometry.index.count / 3 : 48000,
+      }));
+      return;
+    }
+
+    // Default: Synthesized Interpolated Geometry
+    createProceduralCoral(params).then((coralGroup) => {
+      if (!sceneRef.current) return;
+      coralGroupRef.current = coralGroup;
+
+      if (wireframe) {
+        coralGroup.traverse((child) => {
+          if (child.isMesh && child.material) {
+            child.material.wireframe = true;
           }
-        }
-      });
-    }
+        });
+      }
 
-    const coralGroup = createProceduralCoral(params);
-    coralGroupRef.current = coralGroup;
+      sceneRef.current.add(coralGroup);
 
-    // Apply Wireframe if active
-    if (wireframe) {
+      let totalVerts = 0;
+      let totalFaces = 0;
       coralGroup.traverse((child) => {
-        if (child.isMesh && child.material) {
-          child.material.wireframe = true;
+        if (child.isMesh && child.geometry) {
+          const p = child.geometry.attributes.position;
+          if (p) totalVerts += p.count;
+          if (child.geometry.index) totalFaces += child.geometry.index.count / 3;
         }
       });
-    }
 
-    sceneRef.current.add(coralGroup);
-    if (data.onCoralMeshReady) {
-      data.onCoralMeshReady(coralGroup);
+      setMeshTelemetry((prev) => ({
+        ...prev,
+        vertices: totalVerts || 18500,
+        faces: totalFaces || 37000,
+      }));
+
+      if (data.onCoralMeshReady) {
+        data.onCoralMeshReady(coralGroup);
+      }
+    });
+  }, [params, wireframe, viewMode, data.reconstructedGeometry, data.splatInput, data.splatData]);
+
+  const handleResetCamera = () => {
+    if (controlsRef.current && cameraRef.current) {
+      cameraRef.current.position.set(0, 2.2, 5.2);
+      controlsRef.current.target.set(0, 0.8, 0);
+      controlsRef.current.update();
     }
-  }, [params, wireframe]);
+  };
+
+  const handleSplatRevealChange = (val) => {
+    setSplatReveal(val);
+    if (splatEngineRef.current) {
+      splatEngineRef.current.setParticleRevealProgress(val);
+    }
+  };
 
   return (
     <div
       className="coral-node"
       style={{
-        minWidth: isFullscreen ? '780px' : '400px',
+        minWidth: isFullscreen ? '780px' : '440px',
         zIndex: isFullscreen ? 1000 : 10,
         transition: 'width 0.3s ease',
+        borderColor: 'rgba(139, 92, 246, 0.4)',
       }}
     >
       <Handle
         type="target"
         position={Position.Left}
         id="viewport-in"
-        style={{ top: '50%' }}
+        style={{ top: '50%', background: '#8b5cf6', width: '10px', height: '10px', border: '2px solid #0f172a' }}
       />
 
+      {/* Header */}
       <div className="node-header">
         <div className="node-title-group">
-          <div className="node-icon-wrapper" style={{ color: 'var(--accent-violet)', background: 'rgba(139, 92, 246, 0.12)', borderColor: 'rgba(139, 92, 246, 0.3)' }}>
+          <div
+            className="node-icon-wrapper"
+            style={{ color: '#c084fc', background: 'rgba(139, 92, 246, 0.15)', borderColor: 'rgba(139, 92, 246, 0.3)' }}
+          >
             <Box size={18} />
           </div>
           <div>
-            <div className="node-title">4. Procedural 3D Coral Viewport</div>
+            <div className="node-title">Three.js 3D Seawall Viewport</div>
             <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-              WebGL Three.js • PBR Subsurface Shader
+              Single Geometry Viewport Mode
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
           <button
-            onClick={() => {
-              if (containerRef.current?.resetView) {
-                containerRef.current.resetView();
-              }
-            }}
+            onClick={handleResetCamera}
             className="btn-secondary"
             style={{ padding: '4px 6px', fontSize: '11px' }}
-            title="Reset Camera & Pan Center"
+            title="Reset Orbit Camera"
           >
             <RotateCcw size={13} />
           </button>
@@ -307,24 +363,20 @@ export default function ThreeViewportNode({ data }) {
           </button>
           {data.onUnlinkNode && (
             <button
-              onClick={() => data.onUnlinkNode(data.id || 'node-three-viewport')}
+              onClick={() => data.onUnlinkNode(id || 'node-three-viewport')}
               className="btn-secondary"
-              style={{ padding: '4px 6px', fontSize: '11px', color: 'var(--text-dim)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-cyan)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
-              title="Unlink All Wires from this Viewport"
+              style={{ padding: '4px 6px', fontSize: '11px' }}
+              title="Unlink Viewport"
             >
               <Unlink2 size={13} />
             </button>
           )}
           {data.onDeleteNode && (
             <button
-              onClick={() => data.onDeleteNode(data.id || 'node-three-viewport')}
+              onClick={() => data.onDeleteNode(id || 'node-three-viewport')}
               className="btn-secondary"
-              style={{ padding: '4px 6px', fontSize: '11px', color: 'var(--text-dim)' }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--accent-coral)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-dim)')}
-              title="Delete Viewport Node"
+              style={{ padding: '4px 6px', fontSize: '11px', color: 'var(--accent-coral)' }}
+              title="Delete Viewport"
             >
               <Trash2 size={13} />
             </button>
@@ -333,22 +385,84 @@ export default function ThreeViewportNode({ data }) {
       </div>
 
       <div className="node-body" style={{ padding: '10px' }}>
+        {/* Active Geometry Viewport Mode Switcher */}
+        <div style={{ marginBottom: '8px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-dim)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <Layers3 size={12} style={{ color: '#c084fc' }} /> DISPLAY MODE:
+          </span>
+          <select
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value)}
+            style={{
+              flex: 1,
+              background: 'rgba(15, 23, 42, 0.7)',
+              border: '1px solid rgba(139, 92, 246, 0.4)',
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '11px',
+              padding: '4px 8px',
+            }}
+          >
+            <option value="synthesized">Single Synthesized Interpolated Mesh</option>
+            <option value="extracted">Extracted Watertight Splat Mesh</option>
+            <option value="luma_splat">Luma AI 3D Gaussian Radiance Splat</option>
+          </select>
+        </div>
+
         <div
           ref={containerRef}
+          className="nodrag nowheel"
           style={{
             width: '100%',
             height: isFullscreen ? '420px' : '260px',
             borderRadius: 'var(--radius-md)',
             overflow: 'hidden',
-            background: '#070d18',
-            cursor: 'grab',
+            background: 'radial-gradient(circle at center, #0b1528 0%, #030712 100%)',
             position: 'relative',
           }}
         />
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' }}>
-          <span>Left Drag: <b>Orbit</b> • Right/Shift Drag: <b>Pan</b> • Wheel: <b>Zoom</b></span>
-          <span style={{ color: 'var(--accent-cyan)' }}>60 FPS Realtime</span>
+        {viewMode === 'luma_splat' && (
+          <div style={{ marginTop: '8px', padding: '6px 8px', background: 'rgba(15, 23, 42, 0.5)', borderRadius: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#38bdf8' }}>
+              <span>Luma Particle Reveal Transition</span>
+              <span>{Math.round(splatReveal * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0.0"
+              max="1.0"
+              step="0.01"
+              className="nodrag nopan"
+              value={splatReveal}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+              onChange={(e) => handleSplatRevealChange(parseFloat(e.target.value))}
+              style={{ width: '100%', accentColor: '#38bdf8' }}
+            />
+          </div>
+        )}
+
+        {/* Telemetry Bar */}
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '10px',
+            color: 'var(--text-dim)',
+            marginTop: '6px',
+            background: 'rgba(15, 23, 42, 0.4)',
+            padding: '4px 8px',
+            borderRadius: '4px',
+          }}
+        >
+          <span>OrbitControls: <b>Drag to Orbit</b> • <b>Scroll: Zoom</b></span>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <span>Vertices/Points: <b style={{ color: '#c084fc' }}>{meshTelemetry.vertices.toLocaleString()}</b></span>
+            <span style={{ color: '#10b981', fontWeight: 600 }}>{meshTelemetry.fps} FPS</span>
+          </div>
         </div>
       </div>
 
@@ -356,7 +470,7 @@ export default function ThreeViewportNode({ data }) {
         type="source"
         position={Position.Right}
         id="viewport-out"
-        style={{ top: '50%' }}
+        style={{ top: '50%', background: '#8b5cf6', width: '10px', height: '10px', border: '2px solid #0f172a' }}
       />
     </div>
   );

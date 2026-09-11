@@ -119,38 +119,42 @@ export default function SOMGridViewportNode({ id, data }) {
 
     let instanceIdx = 0;
 
-    somGrid.forEach((row, j) => {
-      row.forEach((cell, i) => {
-        const posX = i * spacing - offset;
-        const posZ = j * spacing - offset;
+    const generateGrid = async () => {
+      for (let j = 0; j < somGrid.length; j++) {
+        for (let i = 0; i < somGrid[j].length; i++) {
+          const cell = somGrid[j][i];
+          const posX = i * spacing - offset;
+          const posZ = j * spacing - offset;
 
-        // Fast procedural generation for grid (low res)
-        const coral = createProceduralCoral({
-          ...cell.parameters,
-          resolution: 12, // extremely lightweight marching cubes for 100 grids
-          showPolyps: false,
-          substrateType: 'none',
-          growthScale: 0.35,
-        });
+          const coral = await createProceduralCoral({
+            ...cell.parameters,
+            resolution: 12,
+            showPolyps: false,
+            substrateType: 'none',
+            growthScale: 0.35,
+          });
 
-        coral.position.set(posX, 0, posZ);
-        coral.userData = { cell };
-        gridGroupRef.current.add(coral);
+          coral.position.set(posX, 0, posZ);
+          coral.userData = { cell };
+          gridGroupRef.current.add(coral);
 
-        // Position pedestal instance
-        dummy.position.set(posX, -0.05, posZ);
-        dummy.updateMatrix();
-        pedestalInstancedMesh.setMatrixAt(instanceIdx, dummy.matrix);
-        pedestalInstancedMesh.setColorAt(instanceIdx, new THREE.Color('#1e293b'));
-        
-        pedestalInstancedMesh.userData.cells[instanceIdx] = cell;
-        
-        instanceIdx++;
-      });
-    });
+          dummy.position.set(posX, -0.05, posZ);
+          dummy.updateMatrix();
+          pedestalInstancedMesh.setMatrixAt(instanceIdx, dummy.matrix);
+          pedestalInstancedMesh.setColorAt(instanceIdx, new THREE.Color('#1e293b'));
+          
+          pedestalInstancedMesh.userData.cells[instanceIdx] = cell;
+          instanceIdx++;
+        }
+      }
+      if (pedestalInstancedMesh.instanceMatrix) pedestalInstancedMesh.instanceMatrix.needsUpdate = true;
+      if (pedestalInstancedMesh.instanceColor) pedestalInstancedMesh.instanceColor.needsUpdate = true;
+    };
     
-    pedestalInstancedMesh.instanceMatrix.needsUpdate = true;
-    pedestalInstancedMesh.instanceColor.needsUpdate = true;
+    generateGrid();
+    
+    if (pedestalInstancedMesh.instanceMatrix) pedestalInstancedMesh.instanceMatrix.needsUpdate = true;
+    if (pedestalInstancedMesh.instanceColor) pedestalInstancedMesh.instanceColor.needsUpdate = true;
 
   }, [somGrid, isSolverEnabled]);
 
@@ -233,6 +237,8 @@ export default function SOMGridViewportNode({ id, data }) {
         <div className="flex gap-2 items-center nodrag nopan">
           <button 
             onClick={() => setIsSolverEnabled(!isSolverEnabled)}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-bold transition-colors ${isSolverEnabled ? 'bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/50' : 'bg-slate-700 text-slate-400 border border-slate-600'}`}
             title={isSolverEnabled ? "Disable SOM Solver" : "Enable SOM Solver"}
           >
@@ -241,7 +247,9 @@ export default function SOMGridViewportNode({ id, data }) {
           </button>
           
           <select 
-            className="bg-slate-900 text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none"
+            className="bg-slate-900 text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none nodrag nopan"
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             value={heatmapMode}
             onChange={(e) => setHeatmapMode(e.target.value)}
           >
