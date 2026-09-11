@@ -1,6 +1,9 @@
 # Marine_Seawalls
 
+**Live Interactive Application**: [https://narchtelier.github.io/Marine_Seawalls/](https://narchtelier.github.io/Marine_Seawalls/)
+
 Marine_Seawalls is an advanced computational marine ecology and biomimetic engineering platform designed to analyze, synthesize, and procedurally generate 3D hard coral reef morphologies for ecological seawall enhancement. Combining 3D Gaussian Splatting (`@lumaai/luma-web`), volumetric TSDF isosurface extraction, and Self-Organizing Map (SOM) latent morphospaces within an interactive node graph canvas, researchers and marine engineers can transform 2D coral reef photographs into watertight 3D geometries, synthesize continuous 10x10 latent manifolds, and export production-ready CAD/STL files for additive manufacturing and reef restoration.
+
 
 ## 6-Stage End-to-End Generative Pipeline
 
