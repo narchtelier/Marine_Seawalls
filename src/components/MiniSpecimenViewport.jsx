@@ -1,25 +1,39 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { RotateCw, RotateCcw, Layers, Maximize2 } from 'lucide-react';
+import { OrbitControls } from 'three-stdlib';
+import { RotateCw, Layers, Sparkles, Box, Eye } from 'lucide-react';
 import { createProceduralCoral } from '../engine/coralGenerators';
 
-export default function MiniSpecimenViewport({ parameters, height = 160 }) {
+export default function MiniSpecimenViewport({
+  parameters,
+  splatData,
+  meshGeometry,
+  renderMode = 'splat', // 'splat' | 'mesh' | 'both'
+  height = 200,
+}) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
-  const coralGroupRef = useRef(null);
+  const controlsRef = useRef(null);
+  const splatPointsRef = useRef(null);
+  const meshObjectRef = useRef(null);
   const animFrameRef = useRef(null);
 
   const [autoRotate, setAutoRotate] = useState(true);
   const [wireframe, setWireframe] = useState(false);
+  const [viewMode, setViewMode] = useState(renderMode);
 
   const params = parameters || {};
 
   useEffect(() => {
+    setViewMode(renderMode);
+  }, [renderMode]);
+
+  useEffect(() => {
     if (!containerRef.current) return;
 
-    const width = containerRef.current.clientWidth || 280;
+    const width = containerRef.current.clientWidth || 300;
     const h = height;
 
     const scene = new THREE.Scene();
@@ -27,189 +41,165 @@ export default function MiniSpecimenViewport({ parameters, height = 160 }) {
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(45, width / h, 0.1, 50);
-    camera.position.set(0, 2.0, 4.5);
-    camera.lookAt(0, 0.7, 0);
+    camera.position.set(0, 1.6, 3.8);
+    camera.lookAt(0, 0.5, 0);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(width, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
     rendererRef.current = renderer;
 
     containerRef.current.innerHTML = '';
     containerRef.current.appendChild(renderer.domElement);
 
-    // Lights
-    const ambientLight = new THREE.AmbientLight('#38bdf8', 1.1);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.minDistance = 0.5;
+    controls.maxDistance = 12;
+    controls.target.set(0, 0.5, 0);
+    controlsRef.current = controls;
+
+    // Underwater Lighting Setup
+    const ambientLight = new THREE.AmbientLight('#38bdf8', 0.9);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight('#ffffff', 1.6);
-    dirLight.position.set(4, 6, 4);
-    scene.add(dirLight);
+    const keyLight = new THREE.DirectionalLight('#ffffff', 1.6);
+    keyLight.position.set(3, 5, 4);
+    scene.add(keyLight);
 
-    // Rim backlight for Fresnel subsurface translucency
-    const rimLight = new THREE.DirectionalLight(params.tentacleGlow || '#38bdf8', 1.3);
-    rimLight.position.set(-5, 4, -5);
+    const rimLight = new THREE.DirectionalLight(params.tentacleGlow || '#38bdf8', 1.4);
+    rimLight.position.set(-4, 3, -4);
     scene.add(rimLight);
 
-    const pointLight = new THREE.PointLight(params.tentacleGlow || '#38bdf8', 1.8, 8);
-    pointLight.position.set(0, 1.2, 0);
-    scene.add(pointLight);
+    const bottomLight = new THREE.DirectionalLight('#0284c7', 0.5);
+    bottomLight.position.set(0, -3, 0);
+    scene.add(bottomLight);
 
-    // Grid Floor
-    const grid = new THREE.GridHelper(6, 12, 0x06b6d4, 0x1e293b);
-    grid.position.y = -0.21;
+    // Subtle Bathymetric Depth Grid
+    const grid = new THREE.GridHelper(4, 10, 0x06b6d4, 0x1e293b);
+    grid.position.y = -0.7;
     scene.add(grid);
 
-    // Interaction Orbit & Pan
-    let isDragging = false;
-    let dragMode = 'orbit';
-    let prevMouse = { x: 0, y: 0 };
-    let spherical = { radius: 4.5, theta: 0.7, phi: 1.1 };
-    let target = new THREE.Vector3(0, 0.7, 0);
-
-    const updateCamera = () => {
-      camera.position.x = target.x + spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
-      camera.position.y = target.y + spherical.radius * Math.cos(spherical.phi);
-      camera.position.z = target.z + spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
-      camera.lookAt(target);
-    };
-
-    const dom = renderer.domElement;
-    const onContextMenu = (e) => e.preventDefault();
-
-    const onMouseDown = (e) => {
-      e.stopPropagation();
-      isDragging = true;
-      prevMouse = { x: e.clientX, y: e.clientY };
-      if (e.button === 2 || e.button === 1 || e.shiftKey) {
-        dragMode = 'pan';
-      } else {
-        dragMode = 'orbit';
-      }
-    };
-
-    const onMouseMove = (e) => {
-      if (!isDragging) return;
-      e.stopPropagation();
-      const dx = e.clientX - prevMouse.x;
-      const dy = e.clientY - prevMouse.y;
-
-      if (dragMode === 'pan') {
-        const forward = new THREE.Vector3().subVectors(camera.position, target).normalize();
-        const right = new THREE.Vector3().crossVectors(camera.up, forward).normalize();
-        const up = new THREE.Vector3().crossVectors(forward, right).normalize();
-        const panSpeed = spherical.radius / 600;
-        target.addScaledVector(right, -dx * panSpeed);
-        target.addScaledVector(up, dy * panSpeed);
-      } else {
-        spherical.theta -= dx * 0.012;
-        spherical.phi = Math.max(0.1, Math.min(Math.PI / 2 + 0.2, spherical.phi - dy * 0.012));
-      }
-
-      prevMouse = { x: e.clientX, y: e.clientY };
-      updateCamera();
-    };
-
-    const onMouseUp = () => {
-      isDragging = false;
-    };
-
-    const onWheel = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      spherical.radius = Math.max(1.5, Math.min(10, spherical.radius + e.deltaY * 0.004));
-      updateCamera();
-    };
-
-    dom.addEventListener('contextmenu', onContextMenu);
-    dom.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    dom.addEventListener('wheel', onWheel, { passive: false });
-
-    containerRef.current.resetView = () => {
-      spherical = { radius: 4.5, theta: 0.7, phi: 1.1 };
-      target = new THREE.Vector3(0, 0.7, 0);
-      updateCamera();
-    };
-
-    // Render loop
-    let clock = new THREE.Clock();
+    // Animation Loop
+    let isMounted = true;
     const animate = () => {
+      if (!isMounted) return;
       animFrameRef.current = requestAnimationFrame(animate);
-      const delta = clock.getDelta();
 
-      if (autoRotate && coralGroupRef.current && !isDragging) {
-        coralGroupRef.current.rotation.y += delta * 0.4;
+      if (autoRotate) {
+        if (splatPointsRef.current) splatPointsRef.current.rotation.y += 0.005;
+        if (meshObjectRef.current) meshObjectRef.current.rotation.y += 0.005;
       }
 
+      controls.update();
       renderer.render(scene, camera);
     };
     animate();
 
+    const handleResize = () => {
+      if (!containerRef.current || !rendererRef.current) return;
+      const nw = containerRef.current.clientWidth;
+      camera.aspect = nw / h;
+      camera.updateProjectionMatrix();
+      rendererRef.current.setSize(nw, h);
+    };
+    window.addEventListener('resize', handleResize);
+
     return () => {
+      isMounted = false;
       cancelAnimationFrame(animFrameRef.current);
-      dom.removeEventListener('contextmenu', onContextMenu);
-      dom.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-      dom.removeEventListener('wheel', onWheel);
+      window.removeEventListener('resize', handleResize);
+      controls.dispose();
       renderer.dispose();
+      if (containerRef.current) containerRef.current.innerHTML = '';
     };
   }, [height]);
 
-  // Update Geometry
+  // Update Gaussian Splat points or Mesh when inputs change
   useEffect(() => {
     if (!sceneRef.current) return;
+    const scene = sceneRef.current;
 
-    if (coralGroupRef.current) {
-      sceneRef.current.remove(coralGroupRef.current);
-      coralGroupRef.current.traverse((child) => {
-        if (child.isMesh) {
-          child.geometry?.dispose();
-          if (Array.isArray(child.material)) {
-            child.material.forEach((m) => m.dispose());
-          } else {
-            child.material?.dispose();
-          }
-        }
-      });
+    // 1. Clean up existing objects
+    if (splatPointsRef.current) {
+      scene.remove(splatPointsRef.current);
+      splatPointsRef.current.geometry.dispose();
+      splatPointsRef.current = null;
+    }
+    if (meshObjectRef.current) {
+      scene.remove(meshObjectRef.current);
+      meshObjectRef.current = null;
     }
 
-    const coralGroup = createProceduralCoral({
-      ...params,
-      growthScale: params.growthScale || 0.85,
-    });
-    coralGroupRef.current = coralGroup;
+    // 2. Add 3D Gaussian Splats if present and mode allows
+    if (splatData && (viewMode === 'splat' || viewMode === 'both')) {
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(splatData.positions, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(splatData.colors, 3));
 
-    if (wireframe) {
-      coralGroup.traverse((child) => {
-        if (child.isMesh && child.material) {
-          child.material.wireframe = true;
-        }
+      const mat = new THREE.PointsMaterial({
+        size: 0.045,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
       });
+
+      const points = new THREE.Points(geo, mat);
+      points.position.y = 0.4;
+      scene.add(points);
+      splatPointsRef.current = points;
     }
 
-    sceneRef.current.add(coralGroup);
-  }, [params, wireframe]);
+    // 3. Add Extracted or Procedural Mesh if in mesh/both mode
+    let isCancelled = false;
+    if (viewMode === 'mesh' || viewMode === 'both' || !splatData) {
+      if (meshGeometry) {
+        const mat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(params.primaryColor || '#0284c7'),
+          roughness: 0.4,
+          metalness: 0.1,
+          wireframe: wireframe,
+          flatShading: false,
+        });
+
+        const mesh = new THREE.Mesh(meshGeometry, mat);
+        mesh.position.y = 0.4;
+        scene.add(mesh);
+        meshObjectRef.current = mesh;
+      } else if (!splatData) {
+        createProceduralCoral({
+          morphologyType: params.morphologyType || 'branching',
+          branchingFactor: params.branchingFactor || 0.6,
+          rugosity: params.rugosity || 0.5,
+          growthScale: 0.8,
+          primaryColor: params.primaryColor || '#0284c7',
+        }).then((coralGroup) => {
+          if (isCancelled || !sceneRef.current) return;
+          coralGroup.position.y = 0.4;
+          scene.add(coralGroup);
+          meshObjectRef.current = coralGroup;
+        }).catch((err) => {
+          console.warn("Failed to generate mini specimen coral:", err);
+        });
+      }
+    }
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [splatData, meshGeometry, viewMode, wireframe, params.primaryColor, params.morphologyType, params.branchingFactor, params.rugosity]);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }} className="nodrag nopan">
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          height: `${height}px`,
-          borderRadius: 'var(--radius-sm)',
-          overflow: 'hidden',
-          background: '#050b14',
-          cursor: 'grab',
-          border: '1px solid rgba(56, 189, 248, 0.2)',
-        }}
-      />
+    <div style={{ position: 'relative', width: '100%', height: `${height}px`, borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* Mini Viewport Overlay Controls */}
+      {/* Floating View Controls */}
       <div
         style={{
           position: 'absolute',
@@ -217,48 +207,53 @@ export default function MiniSpecimenViewport({ parameters, height = 160 }) {
           right: '6px',
           display: 'flex',
           gap: '4px',
-          zIndex: 10,
+          background: 'rgba(7, 13, 24, 0.75)',
+          backdropFilter: 'blur(8px)',
+          padding: '2px 4px',
+          borderRadius: '6px',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
         }}
       >
         <button
-          onClick={() => containerRef.current?.resetView?.()}
-          className="btn-secondary"
-          style={{ padding: '2px 5px', fontSize: '10px', background: 'rgba(0,0,0,0.6)' }}
-          title="Reset Camera"
-        >
-          <RotateCcw size={11} />
-        </button>
-        <button
           onClick={() => setAutoRotate(!autoRotate)}
           className={`btn-secondary ${autoRotate ? 'active' : ''}`}
-          style={{ padding: '2px 5px', fontSize: '10px', background: 'rgba(0,0,0,0.6)' }}
-          title="Toggle Rotation"
+          style={{ padding: '3px 6px', fontSize: '10px' }}
+          title="Toggle Auto-Rotate"
         >
           <RotateCw size={11} />
         </button>
         <button
           onClick={() => setWireframe(!wireframe)}
           className={`btn-secondary ${wireframe ? 'active' : ''}`}
-          style={{ padding: '2px 5px', fontSize: '10px', background: 'rgba(0,0,0,0.6)' }}
+          style={{ padding: '3px 6px', fontSize: '10px' }}
           title="Toggle Wireframe"
         >
           <Layers size={11} />
         </button>
+        {splatData && (
+          <button
+            onClick={() => setViewMode(viewMode === 'splat' ? 'mesh' : viewMode === 'mesh' ? 'both' : 'splat')}
+            className="btn-secondary"
+            style={{ padding: '3px 6px', fontSize: '10px', color: '#38bdf8' }}
+            title="Switch Splat / Solid Mesh View"
+          >
+            {viewMode === 'splat' ? <Sparkles size={11} /> : <Box size={11} />}
+          </button>
+        )}
       </div>
 
+      {/* Footer Hint */}
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          position: 'absolute',
+          bottom: '4px',
+          left: '8px',
           fontSize: '9px',
           color: 'var(--text-dim)',
-          marginTop: '3px',
-          padding: '0 2px',
+          pointerEvents: 'none',
         }}
       >
-        <span>Input Specimen 3D Mesh</span>
-        <span style={{ color: 'var(--accent-teal)' }}>Interactive Orbit / Pan</span>
+        Three.js PBR • Drag: Orbit • Scroll: Zoom • Right-click: Pan
       </div>
     </div>
   );

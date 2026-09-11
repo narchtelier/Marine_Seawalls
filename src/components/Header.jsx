@@ -5,6 +5,7 @@ export default function Header({
   onResetLayout,
   onLoadDualSpecimenTemplate,
   onLoadTripleSpecimenTemplate,
+  onLoadSplatPipeline,
   onAddImagePool,
   onAddExtractor,
 }) {
@@ -110,6 +111,15 @@ export default function Header({
           title="Setup 3 Parallel Image Pools & Extractors into 1 Synthesizer"
         >
           <Sparkles size={14} style={{ color: 'var(--accent-violet)' }} /> Triple Hybrid Setup
+        </button>
+
+        <button
+          onClick={onLoadSplatPipeline}
+          className="btn-secondary"
+          style={{ padding: '6px 12px', fontSize: '12px', borderColor: 'rgba(56, 189, 248, 0.4)', color: '#38bdf8' }}
+          title="Load Reef 3D Gaussian Splatting to Watertight Seawall Mesh Pipeline"
+        >
+          <Sparkles size={14} style={{ color: '#38bdf8' }} /> 3DGS Pipeline
         </button>
 
         <button

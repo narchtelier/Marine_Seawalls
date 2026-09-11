@@ -10,12 +10,10 @@ import {
   Map,
   RefreshCw,
   Images,
-  Cpu,
-  Sliders,
+  Sparkles,
   Box,
-  Waves,
+  Grid,
   Download,
-  GitMerge,
 } from 'lucide-react';
 
 export default function MiroToolbar({
@@ -28,8 +26,6 @@ export default function MiroToolbar({
   showMinimap,
   setShowMinimap,
   onResetLayout,
-  onLoadDualSpecimenTemplate,
-  onLoadTripleSpecimenTemplate,
 }) {
   const [showAddMenu, setShowAddMenu] = useState(false);
 
@@ -81,7 +77,7 @@ export default function MiroToolbar({
               left: '52px',
               top: '0',
               zIndex: 200,
-              width: '230px',
+              width: '260px',
               padding: '8px',
               display: 'flex',
               flexDirection: 'column',
@@ -92,56 +88,73 @@ export default function MiroToolbar({
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-dim)', padding: '4px 8px' }}>
               SPAWN CANVAS NODE
             </div>
+
             <button
               className="btn-secondary"
               style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
               onClick={() => {
-                onAddNode('imagePool');
+                onAddNode('reefImageInput');
                 setShowAddMenu(false);
               }}
             >
-              <Images size={14} style={{ color: 'var(--accent-cyan)' }} /> Image Pool Node
+              <Images size={14} style={{ color: '#38bdf8' }} /> 1. Reef Imagery Input
             </button>
+
             <button
               className="btn-secondary"
               style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
               onClick={() => {
-                onAddNode('featureExtractor');
+                onAddNode('splatMesher');
                 setShowAddMenu(false);
               }}
             >
-              <Cpu size={14} style={{ color: 'var(--accent-teal)' }} /> Feature Extractor Node
+              <Box size={14} style={{ color: '#c084fc' }} /> 2. Splat Surface Extractor
             </button>
+
             <button
               className="btn-secondary"
               style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
               onClick={() => {
-                onAddNode('morphologyControls');
+                onAddNode('watertightViewport');
                 setShowAddMenu(false);
               }}
             >
-              <Sliders size={14} style={{ color: 'var(--accent-coral)' }} /> Synthesizer Node
+              <Box size={14} style={{ color: '#a855f7' }} /> 3. Watertight Mesh Viewport
             </button>
+
             <button
               className="btn-secondary"
               style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
               onClick={() => {
-                onAddNode('threeViewport');
+                onAddNode('morphologySynthesizer');
                 setShowAddMenu(false);
               }}
             >
-              <Box size={14} style={{ color: 'var(--accent-violet)' }} /> 3D Viewport Node
+              <GitMerge size={14} style={{ color: '#f472b6' }} /> Multi-Mesh Synthesizer
             </button>
+
             <button
               className="btn-secondary"
               style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
               onClick={() => {
-                onAddNode('substrateSeawall');
+                onAddNode('somSynthesizer');
                 setShowAddMenu(false);
               }}
             >
-              <Waves size={14} style={{ color: 'var(--accent-emerald)' }} /> Seawall Substrate Node
+              <Grid size={14} style={{ color: '#10b981' }} /> 4. 10x10 SOM Synthesizer Grid
             </button>
+
+            <button
+              className="btn-secondary"
+              style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
+              onClick={() => {
+                onAddNode('interpolatedViewport');
+                setShowAddMenu(false);
+              }}
+            >
+              <Sparkles size={14} style={{ color: '#fbbf24' }} /> 5. Interpolated Viewport
+            </button>
+
             <button
               className="btn-secondary"
               style={{ justifyContent: 'flex-start', padding: '6px 10px', fontSize: '12px' }}
@@ -150,7 +163,7 @@ export default function MiroToolbar({
                 setShowAddMenu(false);
               }}
             >
-              <Download size={14} style={{ color: 'var(--accent-amber)' }} /> Morphology Exporter
+              <Download size={14} style={{ color: '#f59e0b' }} /> 6. Production Exporter
             </button>
           </div>
         )}

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -15,26 +15,25 @@ import {
 import Header from './components/Header';
 import MiroToolbar from './components/MiroToolbar';
 
-import ImagePoolNode from './nodes/ImagePoolNode';
-import FeatureExtractorNode from './nodes/FeatureExtractorNode';
-import MorphologyControlsNode from './nodes/MorphologyControlsNode';
-import ThreeViewportNode from './nodes/ThreeViewportNode';
-import SubstrateSeawallNode from './nodes/SubstrateSeawallNode';
+import ReefImageInputNode from './nodes/ReefImageInputNode';
+import SplatMesherNode from './nodes/SplatMesherNode';
+import WatertightMeshViewportNode from './nodes/WatertightMeshViewportNode';
+import MorphologySynthesizerNode from './nodes/MorphologySynthesizerNode';
+import SOMSynthesizerNode from './nodes/SOMSynthesizerNode';
+import InterpolatedGeometryViewportNode from './nodes/InterpolatedGeometryViewportNode';
 import ExportNode from './nodes/ExportNode';
 import DeletableEdge from './components/DeletableEdge';
-import SOMGridViewportNode from './nodes/SOMGridViewportNode';
 
 import { DEFAULT_CORAL_PRESETS } from './engine/defaultCorals';
-import { analyzeCoralImage } from './engine/imageAnalysis';
 
 const nodeTypes = {
-  imagePool: ImagePoolNode,
-  featureExtractor: FeatureExtractorNode,
-  morphologyControls: MorphologyControlsNode,
-  threeViewport: ThreeViewportNode,
-  substrateSeawall: SubstrateSeawallNode,
+  reefImageInput: ReefImageInputNode,
+  splatMesher: SplatMesherNode,
+  watertightViewport: WatertightMeshViewportNode,
+  morphologySynthesizer: MorphologySynthesizerNode,
+  somSynthesizer: SOMSynthesizerNode,
+  interpolatedViewport: InterpolatedGeometryViewportNode,
   exportNode: ExportNode,
-  somGridViewport: SOMGridViewportNode,
 };
 
 const edgeTypes = {
@@ -44,482 +43,387 @@ const edgeTypes = {
 function FlowApp() {
   const { fitView, zoomIn, zoomOut } = useReactFlow();
 
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
   const [activeTool, setActiveTool] = useState('select');
   const [showMinimap, setShowMinimap] = useState(true);
 
-  // Global active synthesized parameters for 3D Viewport & Export
-  const [synthesizedParams, setSynthesizedParams] = useState({
-    ...DEFAULT_CORAL_PRESETS[0].features,
-    growthScale: 1.0,
-    polypSize: 0.08,
-    showPolyps: true,
-    substrateType: 'seawall',
+  // Active state bridging pipeline for multi-specimen synthesis
+  const [specimenAGeometry, setSpecimenAGeometry] = useState(null);
+  const [specimenBGeometry, setSpecimenBGeometry] = useState(null);
+  const [specimenAData, setSpecimenAData] = useState({
+    name: 'Specimen A (Brain Coral)',
+    morphologyType: 'brain',
+    features: DEFAULT_CORAL_PRESETS[1].features,
+  });
+  const [specimenBData, setSpecimenBData] = useState({
+    name: 'Specimen B (Staghorn Coral)',
+    morphologyType: 'branching',
+    features: DEFAULT_CORAL_PRESETS[0].features,
   });
 
-  const [coralMesh, setCoralMesh] = useState(null);
-  const [synthesizerWeights, setSynthesizerWeights] = useState({
-    'node-extractor-1': 0.5,
-    'node-extractor-2': 0.5,
-  });
+  const [synthesizerData, setSynthesizerData] = useState(null);
+  const [selectedSOMCell, setSelectedSOMCell] = useState(null);
+  const [finalCoralMesh, setFinalCoralMesh] = useState(null);
 
-  // Recompute synthesized parameters from all connected extractors
-  const recomputeSynthesis = useCallback((currentNodes, currentEdges, weights) => {
-    const synthNode = currentNodes.find((n) => n.type === 'morphologyControls');
-    if (!synthNode) return;
+  // Handle edge delete / wire cut
+  const handleDeleteEdge = useCallback((edgeId) => {
+    setEdges((eds) => eds.filter((e) => e.id !== edgeId));
+  }, [setEdges]);
 
-    const incomingEdges = currentEdges.filter((e) => e.target === synthNode.id);
-    const incomingExtractors = currentNodes.filter((n) =>
-      incomingEdges.some((e) => e.source === n.id)
-    );
+  // Handle unlinking all connections for a specific node
+  const handleUnlinkNode = useCallback((nodeId) => {
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, [setEdges]);
 
-    if (incomingExtractors.length === 0) return;
+  // Handle node delete
+  const handleDeleteNode = useCallback((nodeId) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, [setNodes, setEdges]);
 
-    let totalWeight = 0;
-    const currentWeights = {};
-    incomingExtractors.forEach((ext) => {
-      const w = weights[ext.id] !== undefined ? weights[ext.id] : 1.0 / incomingExtractors.length;
-      currentWeights[ext.id] = w;
-      totalWeight += w;
-    });
-
-    const norm = totalWeight > 0 ? totalWeight : 1.0;
-
-    let bBranch = 0, bRugo = 0, bCalice = 0, bMean = 0, bFrac = 0;
-    incomingExtractors.forEach((ext) => {
-      const w = currentWeights[ext.id] / norm;
-      const f = ext.data?.features || DEFAULT_CORAL_PRESETS[0].features;
-      bBranch += (f.branchingFactor || 0) * w;
-      bRugo += (f.rugosity || 0) * w;
-      bCalice += (f.caliceDensity || 0) * w;
-      bMean += (f.meanderingFreq || 0) * w;
-      bFrac += (f.fractalDimension || 1.6) * w;
-    });
-
-    // Dominant archetype
-    let dominantExt = incomingExtractors[0];
-    let maxW = -1;
-    incomingExtractors.forEach((ext) => {
-      if (currentWeights[ext.id] > maxW) {
-        maxW = currentWeights[ext.id];
-        dominantExt = ext;
-      }
-    });
-
-    const domF = dominantExt?.data?.features || DEFAULT_CORAL_PRESETS[0].features;
-
-    setSynthesizedParams((prev) => ({
-      ...prev,
-      morphologyType: domF.morphologyType || 'branching',
-      primaryColor: domF.primaryColor || prev.primaryColor,
-      secondaryColor: domF.secondaryColor || prev.secondaryColor,
-      tentacleGlow: domF.tentacleGlow || prev.tentacleGlow,
-      branchingFactor: parseFloat(bBranch.toFixed(3)),
-      rugosity: parseFloat(bRugo.toFixed(3)),
-      caliceDensity: parseFloat(bCalice.toFixed(3)),
-      meanderingFreq: parseFloat(bMean.toFixed(3)),
-      fractalDimension: parseFloat(bFrac.toFixed(3)),
-    }));
-    
-    // Update SOM Grid Node with incoming extractors
-    setNodes((nds) => 
-      nds.map(n => 
-        n.type === 'somGridViewport' 
-          ? { ...n, data: { ...n.data, extractors: incomingExtractors.map(e => ({ specimenName: e.data.specimenName, features: e.data.features })) } }
-          : n
-      )
-    );
-  }, []);
-
-  // Update all parameters at once (e.g., from SOM Grid click)
-  const handleSetAllParameters = useCallback((newParams) => {
-    setSynthesizedParams((prev) => {
-      const updated = { ...prev, ...newParams };
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.type === 'morphologyControls' || n.type === 'threeViewport' || n.type === 'exportNode' || n.type === 'substrateSeawall') {
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                parameters: updated,
-              },
-            };
-          }
-          return n;
-        })
-      );
-      return updated;
-    });
-  }, []);
-
-  // Update a parameter directly
-  const handleUpdateParameter = useCallback((key, value) => {
-    setSynthesizedParams((prev) => {
-      const updated = { ...prev, [key]: value };
-      // Update nodes data
-      setNodes((nds) =>
-        nds.map((n) => {
-          if (n.type === 'morphologyControls' || n.type === 'threeViewport' || n.type === 'exportNode' || n.type === 'substrateSeawall') {
-            return {
-              ...n,
-              data: {
-                ...n.data,
-                parameters: updated,
-              },
-            };
-          }
-          return n;
-        })
-      );
-      return updated;
-    });
-  }, []);
-
-  const handleRandomize = useCallback(() => {
-    setSynthesizedParams((prev) => {
-      const updated = {
-        ...prev,
-        branchingFactor: Math.min(1, Math.max(0.1, (prev.branchingFactor || 0.5) + (Math.random() * 0.3 - 0.15))),
-        rugosity: Math.min(1, Math.max(0.1, (prev.rugosity || 0.5) + (Math.random() * 0.3 - 0.15))),
-        caliceDensity: Math.min(1, Math.max(0.1, (prev.caliceDensity || 0.5) + (Math.random() * 0.3 - 0.15))),
-        meanderingFreq: Math.min(1, Math.max(0.1, (prev.meanderingFreq || 0.5) + (Math.random() * 0.3 - 0.15))),
-      };
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.type === 'morphologyControls' || n.type === 'threeViewport' || n.type === 'exportNode'
-            ? { ...n, data: { ...n.data, parameters: updated } }
-            : n
-        )
-      );
-      return updated;
-    });
-  }, []);
-
-  // Weight update handler
-  const handleUpdateWeights = useCallback((extractorId, weight) => {
-    setSynthesizerWeights((prev) => {
-      const nextWeights = { ...prev, [extractorId]: weight };
-      setNodes((nds) => {
-        setEdges((eds) => {
-          recomputeSynthesis(nds, eds, nextWeights);
-          return eds;
-        });
-        return nds.map((n) =>
-          n.type === 'morphologyControls'
-            ? { ...n, data: { ...n.data, inputWeights: nextWeights } }
-            : n
-        );
-      });
-      return nextWeights;
-    });
-  }, [recomputeSynthesis]);
-
-  const handleSetDualWeights = useCallback((id1, w1, id2, w2) => {
-    const nextWeights = { [id1]: w1, [id2]: w2 };
-    setSynthesizerWeights(nextWeights);
-    setNodes((nds) => {
-      setEdges((eds) => {
-        recomputeSynthesis(nds, eds, nextWeights);
-        return eds;
-      });
-      return nds.map((n) =>
-        n.type === 'morphologyControls'
-          ? { ...n, data: { ...n.data, inputWeights: nextWeights } }
-          : n
-      );
-    });
-  }, [recomputeSynthesis]);
-
-  // Handle image selection in a pool
-  const handleSelectPoolImage = useCallback(async (poolId, imageObj) => {
-    // 1. Update pool node
-    setNodes((nds) =>
-      nds.map((n) => (n.id === poolId ? { ...n, data: { ...n.data, selectedImage: imageObj } } : n))
-    );
-
-    // 2. Find connected extractors & analyze
-    setEdges((eds) => {
-      const connectedExtractorIds = eds
-        .filter((e) => e.source === poolId)
-        .map((e) => e.target);
-
-      connectedExtractorIds.forEach(async (extId) => {
-        setNodes((nds) =>
-          nds.map((n) => (n.id === extId ? { ...n, data: { ...n.data, isAnalyzing: true } } : n))
-        );
-
-        let extracted;
-        if (imageObj.features) {
-          extracted = imageObj.features;
-        } else {
-          try {
-            extracted = await analyzeCoralImage(imageObj.previewUrl);
-            imageObj.features = extracted;
-          } catch (e) {
-            extracted = DEFAULT_CORAL_PRESETS[0].features;
-            imageObj.features = extracted;
-          }
-        }
-
-        setNodes((nds) => {
-          const updated = nds.map((n) =>
-            n.id === extId
-              ? {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    isAnalyzing: false,
-                    specimenName: imageObj.name,
-                    features: extracted,
-                  },
-                }
-              : n
-          );
-          recomputeSynthesis(updated, eds, synthesizerWeights);
-          return updated;
-        });
-      });
-      return eds;
-    });
-  }, [recomputeSynthesis, synthesizerWeights]);
-
-  // Handle adding custom images
-  const handleAddPoolImages = useCallback((poolId, newImgs) => {
+  // 1. Splat Ingestion -> Route to corresponding Splat Mesher
+  const handleSplatDataReady = useCallback((splatData, sourceNodeId) => {
+    const targetMesherId = sourceNodeId === 'node-image-input-2' ? 'node-splat-mesher-2' : 'node-splat-mesher-1';
     setNodes((nds) =>
       nds.map((n) => {
-        if (n.id === poolId) {
+        if (n.id === targetMesherId || (nds.length <= 6 && n.type === 'splatMesher')) {
+          return { ...n, data: { ...n.data, splatData } };
+        }
+        return n;
+      })
+    );
+  }, [setNodes]);
+
+  // 2. Splat Mesher -> Watertight Viewports & Morphology Synthesizer
+  const handleMeshReady = useCallback((meshResult) => {
+    const isBranchB = meshResult?.sourceId === 'node-splat-mesher-2';
+
+    if (isBranchB) {
+      if (meshResult?.geometry) setSpecimenBGeometry(meshResult.geometry);
+      const updatedB = {
+        name: 'Specimen B (Extracted)',
+        morphologyType: meshResult?.features?.morphologyType || 'branching',
+        features: meshResult?.features || DEFAULT_CORAL_PRESETS[0].features,
+        vertices: meshResult?.stats?.vertices_count || 18000,
+        triangles: meshResult?.stats?.faces_count || 36000,
+        watertight: meshResult?.stats?.is_watertight ?? true,
+        color: meshResult?.features?.primaryColor || '#0ea5e9',
+        geometry: meshResult.geometry,
+      };
+      setSpecimenBData(updatedB);
+
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === 'node-watertight-viewport-2') {
+            return { ...n, data: { ...n.data, geometry: meshResult.geometry } };
+          }
+          if (n.type === 'morphologySynthesizer') {
+            return { ...n, data: { ...n.data, specimenB: updatedB, geometryB: meshResult.geometry } };
+          }
+          if (n.type === 'somSynthesizer') {
+            return { ...n, data: { ...n.data, geometryB: meshResult.geometry } };
+          }
+          if (n.type === 'interpolatedViewport') {
+            return { ...n, data: { ...n.data, geometryB: meshResult.geometry } };
+          }
+          return n;
+        })
+      );
+    } else {
+      if (meshResult?.geometry) setSpecimenAGeometry(meshResult.geometry);
+      const updatedA = {
+        name: 'Specimen A (Extracted)',
+        morphologyType: meshResult?.features?.morphologyType || 'brain',
+        features: meshResult?.features || DEFAULT_CORAL_PRESETS[1].features,
+        vertices: meshResult?.stats?.vertices_count || 24000,
+        triangles: meshResult?.stats?.faces_count || 48000,
+        watertight: meshResult?.stats?.is_watertight ?? true,
+        color: meshResult?.features?.primaryColor || '#10b981',
+        geometry: meshResult.geometry,
+      };
+      setSpecimenAData(updatedA);
+
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === 'node-watertight-viewport-1') {
+            return { ...n, data: { ...n.data, geometry: meshResult.geometry } };
+          }
+          if (n.type === 'morphologySynthesizer') {
+            return { ...n, data: { ...n.data, specimenA: updatedA, geometryA: meshResult.geometry } };
+          }
+          if (n.type === 'somSynthesizer') {
+            return { ...n, data: { ...n.data, geometryA: meshResult.geometry } };
+          }
+          if (n.type === 'interpolatedViewport') {
+            return { ...n, data: { ...n.data, geometryA: meshResult.geometry } };
+          }
+          return n;
+        })
+      );
+    }
+  }, [setNodes]);
+
+  // 3. Morphology Synthesizer -> 10x10 SOM Latent Space
+  const handleSynthesizerReady = useCallback((synthProfile) => {
+    setSynthesizerData(synthProfile);
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.type === 'somSynthesizer') {
           return {
             ...n,
             data: {
               ...n.data,
-              images: [...newImgs, ...(n.data.images || [])],
+              synthesizerData: synthProfile,
+              specimens: synthProfile.specimens,
+              parameters: synthProfile.parameters,
+              geometryA: synthProfile.geometryA,
+              geometryB: synthProfile.geometryB,
+            },
+          };
+        }
+        if (n.type === 'interpolatedViewport') {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              geometryA: synthProfile.geometryA,
+              geometryB: synthProfile.geometryB,
             },
           };
         }
         return n;
       })
     );
-    if (newImgs.length > 0) {
-      handleSelectPoolImage(poolId, newImgs[0]);
+  }, [setNodes]);
+
+  // 4. SOM Synthesizer Selection -> Interpolated Viewport
+  const handleSelectInterpolated = useCallback((cell) => {
+    setSelectedSOMCell(cell);
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.type === 'interpolatedViewport'
+          ? { ...n, data: { ...n.data, cell, geometry: cell.geometry } }
+          : n
+      )
+    );
+  }, [setNodes]);
+
+  // 5. Interpolated Viewport -> Production Exporter
+  const handleFinalMeshReady = useCallback((meshData) => {
+    if (meshData?.coralMesh) {
+      setFinalCoralMesh(meshData.coralMesh);
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.type === 'exportNode'
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  coralMesh: meshData.coralMesh,
+                  parameters: meshData.parameters,
+                },
+              }
+            : n
+        )
+      );
     }
-  }, [handleSelectPoolImage]);
+  }, [setNodes]);
 
-  // Handle edge delete / wire cut
-  const handleDeleteEdge = useCallback((edgeId) => {
-    setEdges((eds) => {
-      const remainingEdges = eds.filter((e) => e.id !== edgeId);
-      setNodes((nds) => {
-        recomputeSynthesis(nds, remainingEdges, synthesizerWeights);
-        return nds;
-      });
-      return remainingEdges;
-    });
-  }, [recomputeSynthesis, synthesizerWeights]);
-
-  // Handle unlinking all connections for a specific node
-  const handleUnlinkNode = useCallback((nodeId) => {
-    setEdges((eds) => {
-      const remainingEdges = eds.filter((e) => e.source !== nodeId && e.target !== nodeId);
-      setNodes((nds) => {
-        recomputeSynthesis(nds, remainingEdges, synthesizerWeights);
-        return nds;
-      });
-      return remainingEdges;
-    });
-  }, [recomputeSynthesis, synthesizerWeights]);
-
-  // Handle node delete
-  const handleDeleteNode = useCallback((nodeId) => {
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) => {
-      const remainingEdges = eds.filter((e) => e.source !== nodeId && e.target !== nodeId);
-      setNodes((nds) => {
-        recomputeSynthesis(nds, remainingEdges, synthesizerWeights);
-        return nds;
-      });
-      return remainingEdges;
-    });
-  }, [recomputeSynthesis, synthesizerWeights]);
-
-  // Factory to create initial dual setup
-  const createDualSetup = useCallback(() => {
-    const pA = DEFAULT_CORAL_PRESETS[0];
-    const pB = DEFAULT_CORAL_PRESETS[1];
-    const initialWeights = { 'node-extractor-1': 0.5, 'node-extractor-2': 0.5 };
-    setSynthesizerWeights(initialWeights);
-
-    const dualNodes = [
+  // Create initial multi-specimen pipeline setup
+  const createPipelineSetup = useCallback(() => {
+    const initialNodes = [
+      // --- Branch A: Specimen A (Brain Coral) ---
       {
-        id: 'node-pool-1',
-        type: 'imagePool',
+        id: 'node-image-input-1',
+        type: 'reefImageInput',
         position: { x: 50, y: 50 },
         data: {
-          label: '1A. Reference Pool (Staghorn)',
-          images: DEFAULT_CORAL_PRESETS,
-          selectedImage: pA,
-          onSelectImage: handleSelectPoolImage,
-          onAddImages: handleAddPoolImages,
+          label: '1A. Coral Reef Input (Brain Specimen)',
+          initialPresetIndex: 1, // Brain Coral preset
+          onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
+          onSplatDataReady: handleSplatDataReady,
+        },
+      },
+      {
+        id: 'node-splat-mesher-1',
+        type: 'splatMesher',
+        position: { x: 470, y: 50 },
+        data: {
+          label: '2A. Splat Surface Extractor (A)',
+          onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
+          onMeshReady: handleMeshReady,
+        },
+      },
+      {
+        id: 'node-watertight-viewport-1',
+        type: 'watertightViewport',
+        position: { x: 890, y: 50 },
+        data: {
+          label: '3A. Watertight Viewport (Specimen A)',
+          geometry: specimenAGeometry,
           onDeleteNode: handleDeleteNode,
           onUnlinkNode: handleUnlinkNode,
         },
       },
+
+      // --- Branch B: Specimen B (Staghorn Coral) ---
       {
-        id: 'node-extractor-1',
-        type: 'featureExtractor',
-        position: { x: 500, y: 50 },
+        id: 'node-image-input-2',
+        type: 'reefImageInput',
+        position: { x: 50, y: 490 },
         data: {
-          label: '2A. Extractor (Staghorn)',
-          specimenName: pA.name,
-          features: pA.features,
+          label: '1B. Coral Reef Input (Staghorn Specimen)',
+          initialPresetIndex: 0, // Staghorn Branching preset
           onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
+          onSplatDataReady: handleSplatDataReady,
         },
       },
       {
-        id: 'node-pool-2',
-        type: 'imagePool',
-        position: { x: 50, y: 650 },
+        id: 'node-splat-mesher-2',
+        type: 'splatMesher',
+        position: { x: 470, y: 490 },
         data: {
-          label: '1B. Reference Pool (Brain Coral)',
-          images: DEFAULT_CORAL_PRESETS,
-          selectedImage: pB,
-          onSelectImage: handleSelectPoolImage,
-          onAddImages: handleAddPoolImages,
+          label: '2B. Splat Surface Extractor (B)',
+          onDeleteNode: handleDeleteNode,
+          onUnlinkNode: handleUnlinkNode,
+          onMeshReady: handleMeshReady,
+        },
+      },
+      {
+        id: 'node-watertight-viewport-2',
+        type: 'watertightViewport',
+        position: { x: 890, y: 490 },
+        data: {
+          label: '3B. Watertight Viewport (Specimen B)',
+          geometry: specimenBGeometry,
           onDeleteNode: handleDeleteNode,
           onUnlinkNode: handleUnlinkNode,
         },
       },
+
+      // --- Convergence: Morphology Mesh Synthesizer ---
       {
-        id: 'node-extractor-2',
-        type: 'featureExtractor',
-        position: { x: 500, y: 650 },
+        id: 'node-morphology-synthesizer',
+        type: 'morphologySynthesizer',
+        position: { x: 1320, y: 270 },
         data: {
-          label: '2B. Extractor (Brain Coral)',
-          specimenName: pB.name,
-          features: pB.features,
+          label: 'Morphology Mesh Synthesizer',
+          specimenA: specimenAData,
+          specimenB: specimenBData,
+          geometryA: specimenAGeometry,
+          geometryB: specimenBGeometry,
           onDeleteNode: handleDeleteNode,
           onUnlinkNode: handleUnlinkNode,
+          onSynthesizerReady: handleSynthesizerReady,
         },
       },
+
+      // --- 10x10 SOM Synthesizer Grid ---
       {
-        id: 'node-synthesizer',
-        type: 'morphologyControls',
-        position: { x: 1000, y: 300 },
+        id: 'node-som-synthesizer',
+        type: 'somSynthesizer',
+        position: { x: 1760, y: 270 },
         data: {
-          label: '3. Morphology Multi-Input Synthesizer',
-          parameters: synthesizedParams,
-          connectedExtractors: [
-            { id: 'node-extractor-1', specimenName: pA.name, features: pA.features },
-            { id: 'node-extractor-2', specimenName: pB.name, features: pB.features },
-          ],
-          inputWeights: initialWeights,
-          onUpdateParameter: handleUpdateParameter,
-          onUpdateWeights: handleUpdateWeights,
-          onSetDualWeights: handleSetDualWeights,
-          onRandomize: handleRandomize,
+          label: '4. 10x10 SOM Synthesizer Grid',
+          synthesizerData: synthesizerData,
+          geometryA: specimenAGeometry,
+          geometryB: specimenBGeometry,
           onDeleteNode: handleDeleteNode,
           onUnlinkNode: handleUnlinkNode,
+          onSelectInterpolated: handleSelectInterpolated,
         },
       },
+
+      // --- Selected Interpolated Geometry Viewport ---
       {
-        id: 'node-som-grid',
-        type: 'somGridViewport',
-        position: { x: 1000, y: 800 },
+        id: 'node-interpolated-viewport',
+        type: 'interpolatedViewport',
+        position: { x: 2220, y: 270 },
         data: {
-          extractors: [
-            { specimenName: pA.name, features: pA.features },
-            { specimenName: pB.name, features: pB.features },
-          ],
-          onSetSynthesizedParams: handleSetAllParameters,
-        },
-      },
-      {
-        id: 'node-three-viewport',
-        type: 'threeViewport',
-        position: { x: 1550, y: 300 },
-        data: {
-          parameters: synthesizedParams,
-          onCoralMeshReady: setCoralMesh,
+          label: '5. Selected Interpolated Geometry',
+          cell: selectedSOMCell,
+          geometry: selectedSOMCell?.geometry,
+          geometryA: specimenAGeometry,
+          geometryB: specimenBGeometry,
           onDeleteNode: handleDeleteNode,
           onUnlinkNode: handleUnlinkNode,
+          onFinalMeshReady: handleFinalMeshReady,
         },
       },
-      {
-        id: 'node-substrate-seawall',
-        type: 'substrateSeawall',
-        position: { x: 1000, y: 1250 },
-        data: {
-          parameters: synthesizedParams,
-          onUpdateParameter: handleUpdateParameter,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
+
+      // --- Production Exporter ---
       {
         id: 'node-export',
         type: 'exportNode',
-        position: { x: 2100, y: 300 },
+        position: { x: 2680, y: 270 },
         data: {
-          coralMesh,
-          parameters: synthesizedParams,
+          label: '6. Production Exporter',
+          coralMesh: finalCoralMesh,
+          parameters: selectedSOMCell?.parameters,
           onDeleteNode: handleDeleteNode,
           onUnlinkNode: handleUnlinkNode,
         },
       },
     ];
 
-    const dualEdges = [
-      { id: 'e-p1-e1', source: 'node-pool-1', sourceHandle: 'image-out', target: 'node-extractor-1', targetHandle: 'image-in', animated: true },
-      { id: 'e-p2-e2', source: 'node-pool-2', sourceHandle: 'image-out', target: 'node-extractor-2', targetHandle: 'image-in', animated: true },
-      { id: 'e-e1-s', source: 'node-extractor-1', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
-      { id: 'e-e2-s', source: 'node-extractor-2', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
-      { id: 'e-s-som', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-som-grid', targetHandle: 'grid-in', animated: true, style: { strokeDasharray: '5,5' } },
-      { id: 'e-s-v', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
-      { id: 'e-sub-v', source: 'node-substrate-seawall', sourceHandle: 'substrate-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
-      { id: 'e-v-exp', source: 'node-three-viewport', sourceHandle: 'viewport-out', target: 'node-export', targetHandle: 'export-in', animated: true },
+    const initialEdges = [
+      // Branch A Edges
+      { id: 'e-1a-2a', source: 'node-image-input-1', sourceHandle: 'splat-out', target: 'node-splat-mesher-1', targetHandle: 'splat-in', animated: true },
+      { id: 'e-2a-3a', source: 'node-splat-mesher-1', sourceHandle: 'mesh-out', target: 'node-watertight-viewport-1', targetHandle: 'watertight-in', animated: true },
+      { id: 'e-3a-synth', source: 'node-watertight-viewport-1', sourceHandle: 'watertight-out', target: 'node-morphology-synthesizer', targetHandle: 'mesh-in-1', animated: true },
+
+      // Branch B Edges
+      { id: 'e-1b-2b', source: 'node-image-input-2', sourceHandle: 'splat-out', target: 'node-splat-mesher-2', targetHandle: 'splat-in', animated: true },
+      { id: 'e-2b-3b', source: 'node-splat-mesher-2', sourceHandle: 'mesh-out', target: 'node-watertight-viewport-2', targetHandle: 'watertight-in', animated: true },
+      { id: 'e-3b-synth', source: 'node-watertight-viewport-2', sourceHandle: 'watertight-out', target: 'node-morphology-synthesizer', targetHandle: 'mesh-in-2', animated: true },
+
+      // Synthesizer -> SOM -> Viewport -> Exporter
+      { id: 'e-synth-som', source: 'node-morphology-synthesizer', sourceHandle: 'synthesizer-out', target: 'node-som-synthesizer', targetHandle: 'som-in', animated: true },
+      { id: 'e-som-interp', source: 'node-som-synthesizer', sourceHandle: 'som-out', target: 'node-interpolated-viewport', targetHandle: 'interpolated-in', animated: true },
+      { id: 'e-interp-exp', source: 'node-interpolated-viewport', sourceHandle: 'interpolated-out', target: 'node-export', targetHandle: 'export-in', animated: true },
     ];
 
-    return { dualNodes, dualEdges };
+    return { initialNodes, initialEdges };
   }, [
-    synthesizedParams,
-    coralMesh,
-    handleSelectPoolImage,
-    handleAddPoolImages,
+    specimenAGeometry,
+    specimenBGeometry,
+    specimenAData,
+    specimenBData,
+    synthesizerData,
+    selectedSOMCell,
+    finalCoralMesh,
     handleDeleteNode,
     handleUnlinkNode,
-    handleUpdateParameter,
-    handleUpdateWeights,
-    handleSetDualWeights,
-    handleRandomize,
+    handleSplatDataReady,
+    handleMeshReady,
+    handleSynthesizerReady,
+    handleSelectInterpolated,
+    handleFinalMeshReady,
   ]);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
   // Initialize once on mount
   const hasInitialized = useRef(false);
   React.useEffect(() => {
     if (!hasInitialized.current) {
       hasInitialized.current = true;
-      const { dualNodes, dualEdges } = createDualSetup();
-      setNodes(dualNodes);
-      setEdges(dualEdges);
-      setTimeout(() => fitView({ padding: 0.15, duration: 400 }), 100);
+      const { initialNodes, initialEdges } = createPipelineSetup();
+      setNodes(initialNodes);
+      setEdges(initialEdges);
+      setTimeout(() => fitView({ padding: 0.12, duration: 450 }), 100);
     }
-  }, [createDualSetup, setNodes, setEdges, fitView]);
+  }, [createPipelineSetup, setNodes, setEdges, fitView]);
 
   // Connect edge
   const onConnect = useCallback(
     (params) => {
-      setEdges((eds) => {
-        const nextEds = addEdge({ ...params, animated: true }, eds);
-        setNodes((nds) => {
-          recomputeSynthesis(nds, nextEds, synthesizerWeights);
-          return nds;
-        });
-        return nextEds;
-      });
+      setEdges((eds) => addEdge({ ...params, animated: true }, eds));
     },
-    [recomputeSynthesis, synthesizerWeights, setEdges, setNodes]
+    [setEdges]
   );
 
   // Add custom node
@@ -531,324 +435,94 @@ function FlowApp() {
       position: { x: 200 + Math.random() * 300, y: 150 + Math.random() * 300 },
       data: {
         label: `Custom ${type.replace(/([A-Z])/g, ' $1')}`,
-        images: DEFAULT_CORAL_PRESETS,
-        selectedImage: DEFAULT_CORAL_PRESETS[0],
-        features: DEFAULT_CORAL_PRESETS[0].features,
-        specimenName: DEFAULT_CORAL_PRESETS[0].name,
-        parameters: synthesizedParams,
-        coralMesh,
-        onSelectImage: handleSelectPoolImage,
-        onAddImages: handleAddPoolImages,
+        specimenA: specimenAData,
+        specimenB: specimenBData,
+        geometry: specimenAGeometry,
+        cell: selectedSOMCell,
+        coralMesh: finalCoralMesh,
         onDeleteNode: handleDeleteNode,
         onUnlinkNode: handleUnlinkNode,
-        onUpdateParameter: handleUpdateParameter,
-        onUpdateWeights: handleUpdateWeights,
-        onSetDualWeights: handleSetDualWeights,
-        onRandomize: handleRandomize,
-        onCoralMeshReady: setCoralMesh,
+        onSplatDataReady: handleSplatDataReady,
+        onMeshReady: handleMeshReady,
+        onSynthesizerReady: handleSynthesizerReady,
+        onSelectInterpolated: handleSelectInterpolated,
+        onFinalMeshReady: handleFinalMeshReady,
       },
     };
     setNodes((nds) => [...nds, newNode]);
   }, [
-    synthesizedParams,
-    coralMesh,
-    handleSelectPoolImage,
-    handleAddPoolImages,
+    specimenAData,
+    specimenBData,
+    specimenAGeometry,
+    selectedSOMCell,
+    finalCoralMesh,
     handleDeleteNode,
     handleUnlinkNode,
-    handleUpdateParameter,
-    handleUpdateWeights,
-    handleSetDualWeights,
-    handleRandomize,
+    handleSplatDataReady,
+    handleMeshReady,
+    handleSynthesizerReady,
+    handleSelectInterpolated,
+    handleFinalMeshReady,
     setNodes,
   ]);
 
-  const handleResetLayout = () => {
-    const { dualNodes, dualEdges } = createDualSetup();
-    setNodes(dualNodes);
-    setEdges(dualEdges);
-    setTimeout(() => fitView({ padding: 0.15, duration: 500 }), 50);
-  };
-
-  const handleLoadTripleTemplate = () => {
-    const pA = DEFAULT_CORAL_PRESETS[0];
-    const pB = DEFAULT_CORAL_PRESETS[1];
-    const pC = DEFAULT_CORAL_PRESETS[2];
-    const tripleWeights = {
-      'node-extractor-1': 0.33,
-      'node-extractor-2': 0.33,
-      'node-extractor-3': 0.34,
-    };
-    setSynthesizerWeights(tripleWeights);
-
-    const tripleNodes = [
-      {
-        id: 'node-pool-1',
-        type: 'imagePool',
-        position: { x: 50, y: 50 },
-        data: {
-          label: '1A. Pool (Staghorn)',
-          images: DEFAULT_CORAL_PRESETS,
-          selectedImage: pA,
-          onSelectImage: handleSelectPoolImage,
-          onAddImages: handleAddPoolImages,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-extractor-1',
-        type: 'featureExtractor',
-        position: { x: 500, y: 50 },
-        data: {
-          label: '2A. Extractor (Staghorn)',
-          specimenName: pA.name,
-          features: pA.features,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-pool-2',
-        type: 'imagePool',
-        position: { x: 50, y: 650 },
-        data: {
-          label: '1B. Pool (Brain Coral)',
-          images: DEFAULT_CORAL_PRESETS,
-          selectedImage: pB,
-          onSelectImage: handleSelectPoolImage,
-          onAddImages: handleAddPoolImages,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-extractor-2',
-        type: 'featureExtractor',
-        position: { x: 500, y: 650 },
-        data: {
-          label: '2B. Extractor (Brain Coral)',
-          specimenName: pB.name,
-          features: pB.features,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-pool-3',
-        type: 'imagePool',
-        position: { x: 50, y: 1250 },
-        data: {
-          label: '1C. Pool (Massive Boulder)',
-          images: DEFAULT_CORAL_PRESETS,
-          selectedImage: pC,
-          onSelectImage: handleSelectPoolImage,
-          onAddImages: handleAddPoolImages,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-extractor-3',
-        type: 'featureExtractor',
-        position: { x: 500, y: 1250 },
-        data: {
-          label: '2C. Extractor (Massive Boulder)',
-          specimenName: pC.name,
-          features: pC.features,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-synthesizer',
-        type: 'morphologyControls',
-        position: { x: 1000, y: 600 },
-        data: {
-          label: '3. Triple-Input Morphology Synthesizer',
-          parameters: synthesizedParams,
-          connectedExtractors: [
-            { id: 'node-extractor-1', specimenName: pA.name, features: pA.features },
-            { id: 'node-extractor-2', specimenName: pB.name, features: pB.features },
-            { id: 'node-extractor-3', specimenName: pC.name, features: pC.features },
-          ],
-          inputWeights: tripleWeights,
-          onUpdateParameter: handleUpdateParameter,
-          onUpdateWeights: handleUpdateWeights,
-          onSetDualWeights: handleSetDualWeights,
-          onRandomize: handleRandomize,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-som-grid',
-        type: 'somGridViewport',
-        position: { x: 1000, y: 1100 },
-        data: {
-          extractors: [
-            { specimenName: pA.name, features: pA.features },
-            { specimenName: pB.name, features: pB.features },
-            { specimenName: pC.name, features: pC.features },
-          ],
-          onSetSynthesizedParams: handleSetAllParameters,
-        },
-      },
-      {
-        id: 'node-three-viewport',
-        type: 'threeViewport',
-        position: { x: 1550, y: 600 },
-        data: {
-          parameters: synthesizedParams,
-          onCoralMeshReady: setCoralMesh,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-substrate-seawall',
-        type: 'substrateSeawall',
-        position: { x: 1000, y: 1600 },
-        data: {
-          parameters: synthesizedParams,
-          onUpdateParameter: handleUpdateParameter,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-      {
-        id: 'node-export',
-        type: 'exportNode',
-        position: { x: 2100, y: 600 },
-        data: {
-          coralMesh,
-          parameters: synthesizedParams,
-          onDeleteNode: handleDeleteNode,
-          onUnlinkNode: handleUnlinkNode,
-        },
-      },
-    ];
-
-    const tripleEdges = [
-      { id: 'e-p1-e1', source: 'node-pool-1', sourceHandle: 'image-out', target: 'node-extractor-1', targetHandle: 'image-in', animated: true },
-      { id: 'e-p2-e2', source: 'node-pool-2', sourceHandle: 'image-out', target: 'node-extractor-2', targetHandle: 'image-in', animated: true },
-      { id: 'e-p3-e3', source: 'node-pool-3', sourceHandle: 'image-out', target: 'node-extractor-3', targetHandle: 'image-in', animated: true },
-      { id: 'e-e1-s', source: 'node-extractor-1', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
-      { id: 'e-e2-s', source: 'node-extractor-2', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
-      { id: 'e-e3-s', source: 'node-extractor-3', sourceHandle: 'features-out', target: 'node-synthesizer', targetHandle: 'controls-in', animated: true },
-      { id: 'e-s-som', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-som-grid', targetHandle: 'grid-in', animated: true, style: { strokeDasharray: '5,5' } },
-      { id: 'e-s-v', source: 'node-synthesizer', sourceHandle: 'controls-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
-      { id: 'e-sub-v', source: 'node-substrate-seawall', sourceHandle: 'substrate-out', target: 'node-three-viewport', targetHandle: 'viewport-in', animated: true },
-      { id: 'e-v-exp', source: 'node-three-viewport', sourceHandle: 'viewport-out', target: 'node-export', targetHandle: 'export-in', animated: true },
-    ];
-
-    setNodes(tripleNodes);
-    setEdges(tripleEdges);
-    setTimeout(() => fitView({ padding: 0.15, duration: 500 }), 50);
-  };
-
-  // Memoize rendered edges with wire cutting deletion callbacks and cut mode state
-  const renderedEdges = useMemo(() => {
-    return edges.map((e) => ({
-      ...e,
-      data: {
-        ...e.data,
-        onDeleteEdge: handleDeleteEdge,
-        isCutMode: activeTool === 'cut',
-      },
-    }));
-  }, [edges, handleDeleteEdge, activeTool]);
-
-  // Handle edge click in cut mode
-  const onEdgeClick = useCallback(
-    (evt, edge) => {
-      if (activeTool === 'cut') {
-        evt.stopPropagation();
-        handleDeleteEdge(edge.id);
-      }
-    },
-    [activeTool, handleDeleteEdge]
-  );
-
-  // Handle keyboard Delete / Backspace edge deletion
-  const onEdgesDelete = useCallback(
-    (deletedEdges) => {
-      const deletedIds = new Set(deletedEdges.map((e) => e.id));
-      setEdges((eds) => {
-        const remainingEdges = eds.filter((e) => !deletedIds.has(e.id));
-        setNodes((nds) => {
-          recomputeSynthesis(nds, remainingEdges, synthesizerWeights);
-          return nds;
-        });
-        return remainingEdges;
-      });
-    },
-    [recomputeSynthesis, synthesizerWeights]
-  );
+  // Reset layout
+  const handleResetLayout = useCallback(() => {
+    const { initialNodes, initialEdges } = createPipelineSetup();
+    setNodes(initialNodes);
+    setEdges(initialEdges);
+    setTimeout(() => fitView({ padding: 0.12, duration: 450 }), 100);
+  }, [createPipelineSetup, setNodes, setEdges, fitView]);
 
   return (
-    <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Header
+    <div style={{ width: '100vw', height: '100vh', background: 'var(--bg-canvas)', position: 'relative', overflow: 'hidden' }}>
+      <Header onAddNode={handleAddNode} />
+
+      <MiroToolbar
+        activeTool={activeTool}
+        setActiveTool={setActiveTool}
+        onAddNode={handleAddNode}
+        onFitView={() => fitView({ duration: 400 })}
+        onZoomIn={() => zoomIn({ duration: 300 })}
+        onZoomOut={() => zoomOut({ duration: 300 })}
+        showMinimap={showMinimap}
+        setShowMinimap={setShowMinimap}
         onResetLayout={handleResetLayout}
-        onLoadDualSpecimenTemplate={handleResetLayout}
-        onLoadTripleSpecimenTemplate={handleLoadTripleTemplate}
-        onAddImagePool={() => handleAddNode('imagePool')}
-        onAddExtractor={() => handleAddNode('featureExtractor')}
       />
 
-      <div style={{ flex: 1, position: 'relative' }}>
-        <MiroToolbar
-          activeTool={activeTool}
-          setActiveTool={setActiveTool}
-          onAddNode={handleAddNode}
-          onFitView={() => fitView({ padding: 0.15, duration: 500 })}
-          onZoomIn={() => zoomIn({ duration: 300 })}
-          onZoomOut={() => zoomOut({ duration: 300 })}
-          showMinimap={showMinimap}
-          setShowMinimap={setShowMinimap}
-          onResetLayout={handleResetLayout}
-        />
-
-        <ReactFlow
-          nodes={nodes}
-          edges={renderedEdges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onEdgeClick={onEdgeClick}
-          onEdgesDelete={onEdgesDelete}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          fitView
-          panOnDrag={activeTool === 'hand' || [1, 2]}
-          selectionOnDrag={activeTool === 'select'}
-          panOnScroll
-          minZoom={0.2}
-          maxZoom={2.0}
-        >
-          <Background
-            variant={BackgroundVariant.Dots}
-            gap={20}
-            size={1.5}
-            color="rgba(56, 189, 248, 0.15)"
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        panOnScroll={activeTool === 'hand'}
+        selectionOnDrag={activeTool === 'select'}
+        panOnDrag={activeTool === 'hand' || [1, 2]} // right or middle mouse button pan
+        fitView
+        defaultEdgeOptions={{ animated: true, type: 'default' }}
+      >
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="rgba(56, 189, 248, 0.15)" />
+        <Controls position="bottom-right" style={{ background: 'rgba(15, 23, 42, 0.8)', borderColor: 'rgba(56, 189, 248, 0.2)' }} />
+        {showMinimap && (
+          <MiniMap
+            position="bottom-left"
+            style={{ background: 'rgba(15, 23, 42, 0.9)', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)' }}
+            nodeColor={(node) => {
+              if (node.type === 'reefImageInput') return '#38bdf8';
+              if (node.type === 'splatMesher') return '#c084fc';
+              if (node.type === 'watertightViewport') return '#a855f7';
+              if (node.type === 'morphologySynthesizer') return '#f472b6';
+              if (node.type === 'somSynthesizer') return '#10b981';
+              if (node.type === 'interpolatedViewport') return '#fbbf24';
+              if (node.type === 'exportNode') return '#f59e0b';
+              return '#64748b';
+            }}
           />
-          <Controls position="bottom-left" showInteractive={false} />
-          {showMinimap && (
-            <MiniMap
-              position="bottom-right"
-              nodeColor={(n) => {
-                if (n.type === 'threeViewport') return '#8b5cf6';
-                if (n.type === 'featureExtractor') return '#14b8a6';
-                if (n.type === 'morphologyControls') return '#f43f5e';
-                if (n.type === 'substrateSeawall') return '#10b981';
-                if (n.type === 'exportNode') return '#f59e0b';
-                return '#06b6d4';
-              }}
-              maskColor="rgba(7, 13, 24, 0.8)"
-            />
-          )}
-        </ReactFlow>
-      </div>
+        )}
+      </ReactFlow>
     </div>
   );
 }
