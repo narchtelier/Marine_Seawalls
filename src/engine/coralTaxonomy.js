@@ -11,6 +11,21 @@ export const CORAL_SPECIES_PRESETS = [
     archetype: 'branching',
     features: {
       morphologyType: 'branching',
+      colonyForm: 'branching',
+      branchTapering: 0.85,
+      branchAngleMean: 0.78, // ~45 degrees
+      caliceDiameter: 1.2, // mm
+      caliceSpacing: 3.5, // mm
+      septaCount: 12,
+      // EXACT MORPHOGENETIC GRAMMAR
+      isBiomimetic: true,
+      lSystemAxiom: 'F',
+      lSystemRules: { 'F': 'F[&F]F[^F][F]' },
+      lSystemTheta: 45.0, // Branching angle in degrees
+      lSystemStepScale: 0.75, // How much shorter the next branch is
+      lSystemRadiusScale: 0.8, // How much thinner the next branch is
+      
+      // Legacy params for compatibility
       branchingFactor: 0.92,
       rugosity: 0.65,
       caliceDensity: 0.45,
@@ -30,6 +45,21 @@ export const CORAL_SPECIES_PRESETS = [
     archetype: 'branching',
     features: {
       morphologyType: 'branching',
+      colonyForm: 'digitate',
+      branchTapering: 0.4, // Thick bases
+      branchAngleMean: 0.35, // Broad, almost horizontal
+      caliceDiameter: 1.0,
+      caliceSpacing: 2.0,
+      septaCount: 12,
+      // EXACT MORPHOGENETIC GRAMMAR
+      isBiomimetic: true,
+      lSystemAxiom: 'F',
+      lSystemRules: { 'F': 'F[+F][-F]F' }, // Flattened branching
+      lSystemTheta: 75.0, // Very wide spreading angles
+      lSystemStepScale: 0.85, 
+      lSystemRadiusScale: 0.9, 
+      
+      // Legacy
       branchingFactor: 0.76,
       rugosity: 0.78,
       caliceDensity: 0.55,
@@ -49,6 +79,19 @@ export const CORAL_SPECIES_PRESETS = [
     archetype: 'brain',
     features: {
       morphologyType: 'brain',
+      colonyForm: 'meandroid',
+      meanderingWidth: 8.0, 
+      caliceDiameter: 6.0,
+      caliceSpacing: 6.0,
+      septaCount: 24,
+      // EXACT MORPHOGENETIC GRAMMAR
+      isBiomimetic: true,
+      turingFeed: 0.038, // Specific reaction-diffusion F rate
+      turingKill: 0.062, // Specific reaction-diffusion k rate
+      turingScale: 6.0,  // UV scale for ridges
+      turingHeight: 0.4, // Ridge displacement height
+      
+      // Legacy
       branchingFactor: 0.05,
       rugosity: 0.94,
       caliceDensity: 0.25,
@@ -59,8 +102,40 @@ export const CORAL_SPECIES_PRESETS = [
       secondaryColor: '#059669',
       tentacleGlow: '#6ee7b7',
     },
-    description: 'Meandroid colony with deep parallelambulacral grooves and continuous valleys.',
+    description: 'Meandroid colony with deep parallel ambulacral grooves and continuous valleys.',
     svgColor: '#10b981'
+  },
+  {
+    name: 'Pseudodiploria Strigosa (Symmetrical Brain Coral)',
+    commonName: 'Symmetrical Brain Coral',
+    archetype: 'brain',
+    features: {
+      morphologyType: 'brain',
+      colonyForm: 'meandroid',
+      meanderingWidth: 4.0, 
+      caliceDiameter: 4.0,
+      caliceSpacing: 4.0,
+      septaCount: 24,
+      // EXACT MORPHOGENETIC GRAMMAR
+      isBiomimetic: true,
+      turingFeed: 0.025, // Tighter, worm-like ridges
+      turingKill: 0.055, 
+      turingScale: 12.0, 
+      turingHeight: 0.2, 
+      
+      // Legacy
+      branchingFactor: 0.05,
+      rugosity: 0.94,
+      caliceDensity: 0.25,
+      meanderingFreq: 0.92,
+      fractalDimension: 1.72,
+      fidelity: 1.0,
+      primaryColor: '#059669',
+      secondaryColor: '#047857',
+      tentacleGlow: '#34d399',
+    },
+    description: 'Tighter, highly regular labyrinthine patterns compared to Diploria.',
+    svgColor: '#059669'
   },
   {
     name: 'Porites Lobata (Lobe / Boulder Coral)',
@@ -68,6 +143,18 @@ export const CORAL_SPECIES_PRESETS = [
     archetype: 'massive',
     features: {
       morphologyType: 'massive',
+      colonyForm: 'cerioid',
+      caliceDiameter: 1.5,
+      caliceSpacing: 1.5,
+      septaCount: 12,
+      // EXACT MORPHOGENETIC GRAMMAR
+      isBiomimetic: true,
+      cellularFreq: 25.0, // Tightly packed calices
+      cellularDepth: 0.06,
+      lobeFrequency: 2.5,
+      lobeAmplitude: 0.2,
+      
+      // Legacy
       branchingFactor: 0.10,
       rugosity: 0.82,
       caliceDensity: 0.95,
@@ -87,6 +174,17 @@ export const CORAL_SPECIES_PRESETS = [
     archetype: 'table',
     features: {
       morphologyType: 'table',
+      colonyForm: 'foliose',
+      caliceDiameter: 2.5,
+      caliceSpacing: 4.0,
+      septaCount: 12,
+      // EXACT MORPHOGENETIC GRAMMAR
+      isBiomimetic: true,
+      whorlFreq: 8.0,
+      whorlAmplitude: 0.3,
+      tierDroop: 0.35,
+      
+      // Legacy
       branchingFactor: 0.38,
       rugosity: 0.62,
       caliceDensity: 0.68,
@@ -99,101 +197,6 @@ export const CORAL_SPECIES_PRESETS = [
     },
     description: 'Horizontal tiered platforms with corrugated ruffled margins.',
     svgColor: '#a855f7'
-  },
-  {
-    name: 'Pocillopora Damicornis (Cauliflower Coral)',
-    commonName: 'Cauliflower Coral',
-    archetype: 'branching',
-    features: {
-      morphologyType: 'branching',
-      branchingFactor: 0.84,
-      rugosity: 0.88,
-      caliceDensity: 0.72,
-      meanderingFreq: 0.25,
-      fractalDimension: 1.80,
-      fidelity: 1.0,
-      primaryColor: '#f43f5e',
-      secondaryColor: '#fb7185',
-      tentacleGlow: '#fecdd3',
-    },
-    description: 'Compact verrucose clusters resembling cauliflower florets.',
-    svgColor: '#f43f5e'
-  },
-  {
-    name: 'Tubastraea Coccinea (Orange Sun Coral)',
-    commonName: 'Orange Cup Coral',
-    archetype: 'massive',
-    features: {
-      morphologyType: 'massive',
-      branchingFactor: 0.40,
-      rugosity: 0.85,
-      caliceDensity: 0.82,
-      meanderingFreq: 0.30,
-      fractalDimension: 1.66,
-      fidelity: 1.0,
-      primaryColor: '#ea580c',
-      secondaryColor: '#f97316',
-      tentacleGlow: '#fed7aa',
-    },
-    description: 'Ahermatypic non-zooxanthellate coral with prominent bright orange corallites.',
-    svgColor: '#ea580c'
-  },
-  {
-    name: 'Dendrogyra Cylindrus (Pillar Coral)',
-    commonName: 'Pillar Coral',
-    archetype: 'branching',
-    features: {
-      morphologyType: 'branching',
-      branchingFactor: 0.60,
-      rugosity: 0.70,
-      caliceDensity: 0.50,
-      meanderingFreq: 0.35,
-      fractalDimension: 1.90,
-      fidelity: 1.0,
-      primaryColor: '#78716c',
-      secondaryColor: '#a8a29e',
-      tentacleGlow: '#e7e5e4',
-    },
-    description: 'Majestic vertical spires emerging from encrusting base.',
-    svgColor: '#78716c'
-  },
-  {
-    name: 'Favites Halicora (Honeycomb Star Coral)',
-    commonName: 'Honeycomb Star Coral',
-    archetype: 'massive',
-    features: {
-      morphologyType: 'massive',
-      branchingFactor: 0.15,
-      rugosity: 0.88,
-      caliceDensity: 0.88,
-      meanderingFreq: 0.40,
-      fractalDimension: 1.55,
-      fidelity: 1.0,
-      primaryColor: '#14b8a6',
-      secondaryColor: '#0d9488',
-      tentacleGlow: '#99f6e4',
-    },
-    description: 'Massive cerioid corallites sharing common polygonal walls in honeycomb geometry.',
-    svgColor: '#14b8a6'
-  },
-  {
-    name: 'Seriatopora Hystrix (Bird\'s Nest Coral)',
-    commonName: 'Bird\'s Nest Coral',
-    archetype: 'branching',
-    features: {
-      morphologyType: 'branching',
-      branchingFactor: 0.95,
-      rugosity: 0.60,
-      caliceDensity: 0.40,
-      meanderingFreq: 0.18,
-      fractalDimension: 1.92,
-      fidelity: 1.0,
-      primaryColor: '#ec4899',
-      secondaryColor: '#f472b6',
-      tentacleGlow: '#fbcfe8',
-    },
-    description: 'Delicate needle-thin branches tightly interlaced in high-porosity matrix.',
-    svgColor: '#ec4899'
   }
 ];
 
@@ -225,7 +228,7 @@ export function parseCoralReefTaxonomy(inputName, requestedFidelity = 1.0) {
   const cleanName = inputName.trim();
   const lower = cleanName.toLowerCase();
 
-  // 1. Direct match with preset
+  // 1. Direct match with preset (TRUE BIOMIMICRY)
   const directMatch = CORAL_SPECIES_PRESETS.find(
     (p) =>
       p.name.toLowerCase().includes(lower) ||
@@ -244,95 +247,81 @@ export function parseCoralReefTaxonomy(inputName, requestedFidelity = 1.0) {
     };
   }
 
-  // 2. Intelligent Keyword & Semantic Morphometric Parser
+  // 2. Intelligent Keyword & Semantic Morphometric Parser (Fallback Approximation)
   let archetype = 'branching';
-  let branching = 0.75;
-  let rugosity = 0.65;
-  let calice = 0.50;
-  let meander = 0.20;
-  let fractal = 1.70;
-  let pColor = '#0ea5e9';
-  let sColor = '#0284c7';
-  let glow = '#38bdf8';
+  let colonyForm = 'branching';
+  let caliceDiameter = 1.5;
+  let caliceSpacing = 3.0;
+  let septaCount = 12;
+  
+  // Base Legacy Fallbacks
+  let features = {
+      isBiomimetic: false,
+      morphologyType: archetype,
+      colonyForm: colonyForm,
+      caliceDiameter: caliceDiameter,
+      caliceSpacing: caliceSpacing,
+      septaCount: septaCount,
+      branchTapering: 0.8,
+      branchAngleMean: 0.78,
+      meanderingWidth: 5.0,
+      branchingFactor: 0.75,
+      rugosity: 0.65,
+      caliceDensity: 0.50,
+      meanderingFreq: 0.20,
+      fractalDimension: 1.70,
+      fidelity: requestedFidelity,
+      primaryColor: '#0ea5e9',
+      secondaryColor: '#0284c7',
+      tentacleGlow: '#38bdf8',
+  };
 
   if (lower.match(/brain|diploria|platygyra|maze|meand|pseudodiploria/)) {
-    archetype = 'brain';
-    branching = 0.06;
-    rugosity = 0.92;
-    calice = 0.30;
-    meander = 0.90;
-    fractal = 1.72;
-    pColor = '#10b981';
-    sColor = '#059669';
-    glow = '#6ee7b7';
+    features.archetype = 'brain';
+    features.colonyForm = 'meandroid';
+    features.caliceDiameter = 8.0;
+    features.caliceSpacing = 8.0;
+    features.septaCount = 24;
+    features.primaryColor = '#10b981';
+    features.secondaryColor = '#059669';
+    features.tentacleGlow = '#6ee7b7';
   } else if (lower.match(/massive|boulder|porites|lobe|mound|ball|rock|base|star|favites/)) {
-    archetype = 'massive';
-    branching = 0.12;
-    rugosity = 0.82;
-    calice = 0.92;
-    meander = 0.25;
-    fractal = 1.50;
-    pColor = '#f59e0b';
-    sColor = '#d97706';
-    glow = '#fde68a';
+    features.archetype = 'massive';
+    features.colonyForm = 'cerioid';
+    features.caliceDiameter = 1.2;
+    features.caliceSpacing = 1.2;
+    features.primaryColor = '#f59e0b';
+    features.secondaryColor = '#d97706';
+    features.tentacleGlow = '#fde68a';
   } else if (lower.match(/table|plate|turbinaria|montipora|shelf|flat|foliose|disc|pagoda/)) {
-    archetype = 'table';
-    branching = 0.40;
-    rugosity = 0.60;
-    calice = 0.65;
-    meander = 0.45;
-    fractal = 1.62;
-    pColor = '#a855f7';
-    sColor = '#ec4899';
-    glow = '#f472b6';
-  } else if (lower.match(/staghorn|acropora|branch|antler|tree|bush|spire|pillar|bird|nest/)) {
-    archetype = 'branching';
-    branching = 0.92;
-    rugosity = 0.65;
-    calice = 0.45;
-    meander = 0.15;
-    fractal = 1.86;
-    pColor = '#0ea5e9';
-    sColor = '#0284c7';
-    glow = '#7dd3fc';
+    features.archetype = 'table';
+    features.colonyForm = 'foliose';
+    features.primaryColor = '#a855f7';
+    features.secondaryColor = '#ec4899';
+    features.tentacleGlow = '#f472b6';
   }
 
-  // Color keywords
+  // Color keywords override
   if (lower.includes('orange') || lower.includes('sun') || lower.includes('fire')) {
-    pColor = '#ea580c';
-    sColor = '#f97316';
-    glow = '#fed7aa';
+    features.primaryColor = '#ea580c';
+    features.secondaryColor = '#f97316';
+    features.tentacleGlow = '#fed7aa';
   } else if (lower.includes('pink') || lower.includes('rose') || lower.includes('magenta')) {
-    pColor = '#ec4899';
-    sColor = '#f472b6';
-    glow = '#fbcfe8';
+    features.primaryColor = '#ec4899';
+    features.secondaryColor = '#f472b6';
+    features.tentacleGlow = '#fbcfe8';
   } else if (lower.includes('blue') || lower.includes('cyan') || lower.includes('ocean')) {
-    pColor = '#06b6d4';
-    sColor = '#0284c7';
-    glow = '#38bdf8';
-  } else if (lower.includes('emerald') || lower.includes('green') || lower.includes('jade')) {
-    pColor = '#10b981';
-    sColor = '#059669';
-    glow = '#6ee7b7';
+    features.primaryColor = '#06b6d4';
+    features.secondaryColor = '#0284c7';
+    features.tentacleGlow = '#38bdf8';
   }
 
   return {
     name: cleanName,
     commonName: cleanName,
-    archetype,
-    description: `User-specified reef specimen: ${cleanName} (${archetype} macro-phenotype).`,
-    features: {
-      morphologyType: archetype,
-      branchingFactor: branching,
-      rugosity: rugosity,
-      caliceDensity: calice,
-      meanderingFreq: meander,
-      fractalDimension: fractal,
-      fidelity: requestedFidelity,
-      primaryColor: pColor,
-      secondaryColor: sColor,
-      tentacleGlow: glow,
-    },
-    previewUrl: generateSpecimenSvg(cleanName, pColor, archetype),
+    archetype: features.archetype || 'branching',
+    description: `Generic phenotype approximation for unknown species: ${cleanName}.`,
+    features: features,
+    previewUrl: generateSpecimenSvg(cleanName, features.primaryColor, features.archetype || 'branching'),
   };
 }
