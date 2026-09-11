@@ -10,13 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lumaai/luma-web": "^0.2.2",
+    "@mkkellogg/gaussian-splats-3d": "^0.4.7",
     "@xyflow/react": "^12.11.6",
     "canvas-confetti": "^1.9.4",
     "lucide-react": "^1.42.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "simplex-noise": "^4.0.3",
-    "three": "^0.185.1"
+    "three": "^0.185.1",
+    "three-stdlib": "^2.36.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",
