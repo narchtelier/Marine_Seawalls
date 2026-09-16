@@ -502,6 +502,9 @@ function FlowApp() {
         selectionOnDrag={activeTool === 'select'}
         panOnDrag={activeTool === 'hand' || [1, 2]} // right or middle mouse button pan
         fitView
+        onlyRenderVisibleElements={false}
+        minZoom={0.2}
+        maxZoom={2.5}
         defaultEdgeOptions={{ animated: true, type: 'default' }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="rgba(56, 189, 248, 0.15)" />
