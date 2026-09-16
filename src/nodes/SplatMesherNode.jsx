@@ -16,7 +16,7 @@ import {
 import { extractMeshFromSplat, extractFeaturesFromSplat } from '../engine/imageToSplat';
 import { generateSyntheticReefSplats } from '../engine/lumaSplatEngine';
 
-export default function SplatMesherNode({ id, data }) {
+function SplatMesherNode({ id, data }) {
   const [method, setMethod] = useState('marching_cubes'); // 'marching_cubes' | 'poisson' | 'sugar'
   const [densityThreshold, setDensityThreshold] = useState(0.38);
   const [voxelRes, setVoxelRes] = useState(64);
@@ -38,7 +38,7 @@ export default function SplatMesherNode({ id, data }) {
 
   const handleRunExtraction = (explicitSplat = null) => {
     setIsExtracting(true);
-    setExtractionProgress(25);
+    setExtractionProgress(50);
 
     const startTime = performance.now();
 
@@ -48,55 +48,48 @@ export default function SplatMesherNode({ id, data }) {
       splatInput = generateSyntheticReefSplats('brain_platygyra', 18000);
     }
 
-    setExtractionProgress(55);
+    // Execute 3D Volumetric Gaussian TSDF Isosurface Extraction
+    const result = extractMeshFromSplat(splatInput, {
+      resolution: voxelRes,
+      densityThreshold: densityThreshold,
+      isWatertightSeal: fixNonManifold,
+    });
 
-    setTimeout(() => {
-      // Execute 3D Volumetric Gaussian TSDF Isosurface Extraction
-      const result = extractMeshFromSplat(splatInput, {
-        resolution: voxelRes,
-        densityThreshold: densityThreshold,
-        isWatertightSeal: fixNonManifold,
+    const extractedFeatures = extractFeaturesFromSplat(splatInput);
+    const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+
+    setExtractionProgress(100);
+    setIsExtracting(false);
+
+    setExtractedStats({
+      vertices: result.verticesCount,
+      triangles: result.trianglesCount,
+      watertight: result.isWatertight,
+      manifoldScore: 100.0,
+      meshVolume: `${(result.verticesCount * 0.06).toFixed(0)} cm³`,
+      extractionTime: `${duration}s`,
+      methodUsed: result.method,
+    });
+
+    // Pass mesh and features downstream immediately
+    if (data?.onMeshReady) {
+      data.onMeshReady({
+        geometry: result.geometry,
+        features: extractedFeatures,
+        stats: {
+          vertices_count: result.verticesCount,
+          faces_count: result.trianglesCount,
+          is_watertight: result.isWatertight,
+        },
+        source: 'splat-reconstruction',
+        sourceId: id,
       });
-
-      const extractedFeatures = extractFeaturesFromSplat(splatInput);
-      const duration = ((performance.now() - startTime) / 1000).toFixed(2);
-
-      setExtractionProgress(100);
-      setIsExtracting(false);
-
-      setExtractedStats({
-        vertices: result.verticesCount,
-        triangles: result.trianglesCount,
-        watertight: result.isWatertight,
-        manifoldScore: 100.0,
-        meshVolume: `${(result.verticesCount * 0.06).toFixed(0)} cm³`,
-        extractionTime: `${duration}s`,
-        methodUsed: result.method,
-      });
-
-      // Pass mesh and features downstream
-      if (data?.onMeshReady) {
-        data.onMeshReady({
-          geometry: result.geometry,
-          features: extractedFeatures,
-          stats: {
-            vertices_count: result.verticesCount,
-            faces_count: result.trianglesCount,
-            is_watertight: result.isWatertight,
-          },
-          source: 'splat-reconstruction',
-          sourceId: id,
-        });
-      }
-    }, 80);
+    }
   };
 
-  // Run extraction whenever splatData arrives or parameters change (debounced)
+  // Run extraction whenever splatData arrives or parameters change
   useEffect(() => {
-    const timer = setTimeout(() => {
-      handleRunExtraction(data?.splatData);
-    }, 180);
-    return () => clearTimeout(timer);
+    handleRunExtraction(data?.splatData);
   }, [data?.splatData, voxelRes, densityThreshold, fixNonManifold, method]);
 
   return (
@@ -331,3 +324,5 @@ export default function SplatMesherNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(SplatMesherNode);
