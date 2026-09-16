@@ -54,8 +54,9 @@ export function getFallbackSpecimenGeometry(type = 'brain') {
 export function rasterizeGeometryToGrid(geometry, resolution = 44) {
   if (!geometry || !geometry.attributes?.position) return null;
 
-  if (fieldCache.has(geometry)) {
-    return fieldCache.get(geometry);
+  let resMap = fieldCache.get(geometry);
+  if (resMap && resMap.has(resolution)) {
+    return resMap.get(resolution);
   }
 
   const posAttr = geometry.attributes.position;
@@ -154,9 +155,15 @@ export function rasterizeGeometryToGrid(geometry, resolution = 44) {
     center,
   };
 
-  fieldCache.set(geometry, result);
+  if (!resMap) {
+    resMap = new Map();
+    fieldCache.set(geometry, resMap);
+  }
+  resMap.set(resolution, result);
   return result;
 }
+
+const somInterpCache = new WeakMap();
 
 /**
  * Continuously interpolates between Geometry A and Geometry B in the SOM latent space.
@@ -171,6 +178,18 @@ export function interpolateGeometriesSOM(geomA, geomB, t = 0.5, somOptions = {})
   if (!geomA && !geomB) return new THREE.TorusKnotGeometry(0.7, 0.25, 64, 16);
   if (!geomA) return geomB.clone();
   if (!geomB) return geomA.clone();
+
+  const uKey = Math.round(t * 100) / 100;
+  const vKey = Math.round((somOptions.v !== undefined ? somOptions.v : 0.5) * 100) / 100;
+  const cellKey = `${uKey}_${vKey}`;
+
+  let aMap = somInterpCache.get(geomA);
+  if (aMap) {
+    let bMap = aMap.get(geomB);
+    if (bMap && bMap.has(cellKey)) {
+      return bMap.get(cellKey);
+    }
+  }
 
   const res = 44;
   const fieldA = rasterizeGeometryToGrid(geomA, res);
@@ -342,6 +361,17 @@ export function interpolateGeometriesSOM(geomA, geomB, t = 0.5, somOptions = {})
     morphedGeometry.setIndex(faces);
     morphedGeometry.computeVertexNormals();
   }
+
+  if (!aMap) {
+    aMap = new WeakMap();
+    somInterpCache.set(geomA, aMap);
+  }
+  let bMap = aMap.get(geomB);
+  if (!bMap) {
+    bMap = new Map();
+    aMap.set(geomB, bMap);
+  }
+  bMap.set(cellKey, morphedGeometry);
 
   return morphedGeometry;
 }
