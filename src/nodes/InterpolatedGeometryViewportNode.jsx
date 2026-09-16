@@ -18,7 +18,7 @@ import {
 import { interpolateGeometriesSOM, getFallbackSpecimenGeometry } from '../engine/somGeometryInterpolator';
 import { DEFAULT_CORAL_PRESETS } from '../engine/defaultCorals';
 
-export default function InterpolatedGeometryViewportNode({ id, data }) {
+function InterpolatedGeometryViewportNode({ id, data }) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const sceneRef = useRef(null);
@@ -56,7 +56,7 @@ export default function InterpolatedGeometryViewportNode({ id, data }) {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     rendererRef.current = renderer;
@@ -372,3 +372,5 @@ export default function InterpolatedGeometryViewportNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(InterpolatedGeometryViewportNode);
