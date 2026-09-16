@@ -15,7 +15,7 @@ import {
   Trash2
 } from 'lucide-react';
 
-export default function WatertightMeshViewportNode({ id, data }) {
+function WatertightMeshViewportNode({ id, data }) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const sceneRef = useRef(null);
@@ -50,7 +50,7 @@ export default function WatertightMeshViewportNode({ id, data }) {
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.2;
     rendererRef.current = renderer;
@@ -333,3 +333,5 @@ export default function WatertightMeshViewportNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(WatertightMeshViewportNode);
