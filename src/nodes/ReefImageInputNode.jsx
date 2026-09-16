@@ -16,7 +16,7 @@ import { DEFAULT_CORAL_PRESETS } from '../engine/defaultCorals';
 import { generateSplatFromImage } from '../engine/imageToSplat';
 import { createCustomGaussianSplatMesh } from '../engine/lumaSplatEngine';
 
-export default function ReefImageInputNode({ id, data }) {
+function ReefImageInputNode({ id, data }) {
   const fileInputRef = useRef(null);
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
@@ -52,7 +52,7 @@ export default function ReefImageInputNode({ id, data }) {
 
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
@@ -103,59 +103,56 @@ export default function ReefImageInputNode({ id, data }) {
     }
   };
 
-  // Process image into 3D Gaussian Splat (debounced for smooth slider scrubbing)
+  // Process image into 3D Gaussian Splat immediately upon tile selection
   useEffect(() => {
     if (!selectedImage?.previewUrl || !sceneRef.current) return;
 
     let isCurrent = true;
     setIsGenerating(true);
 
-    const timer = setTimeout(() => {
-      generateSplatFromImage(selectedImage.previewUrl, {
-        depthExtrusion: depthExtrusion,
-        splatScaleBase: 0.022 * (pointScale / 2.0),
-      })
-        .then((splat) => {
-          if (!isCurrent) return;
+    generateSplatFromImage(selectedImage.previewUrl, {
+      depthExtrusion: depthExtrusion,
+      splatScaleBase: 0.022 * (pointScale / 2.0),
+    })
+      .then((splat) => {
+        if (!isCurrent) return;
 
-          // Clean up previous splat mesh
-          if (splatMeshRef.current) {
-            sceneRef.current.remove(splatMeshRef.current);
-            if (splatMeshRef.current.geometry) splatMeshRef.current.geometry.dispose();
-            if (splatMeshRef.current.material) splatMeshRef.current.material.dispose();
-            splatMeshRef.current = null;
-          }
+        // Clean up previous splat mesh
+        if (splatMeshRef.current) {
+          sceneRef.current.remove(splatMeshRef.current);
+          if (splatMeshRef.current.geometry) splatMeshRef.current.geometry.dispose();
+          if (splatMeshRef.current.material) splatMeshRef.current.material.dispose();
+          splatMeshRef.current = null;
+        }
 
-          // Build 3DGS Three.js Mesh
-          const mesh = createCustomGaussianSplatMesh(splat, {
-            pointScale: pointScale,
-            particleRevealProgress: 1.0,
-          });
-
-          sceneRef.current.add(mesh);
-          splatMeshRef.current = mesh;
-
-          setSplatStats({
-            count: splat.count,
-            bounds: `${(splat.bounds.max[0] - splat.bounds.min[0]).toFixed(1)}m x ${(splat.bounds.max[1] - splat.bounds.min[1]).toFixed(1)}m`,
-          });
-
-          setIsGenerating(false);
-
-          // Notify downstream nodes
-          if (data?.onSplatDataReady) {
-            data.onSplatDataReady(splat, id);
-          }
-        })
-        .catch((err) => {
-          console.warn('Image to splat synthesis error:', err);
-          if (isCurrent) setIsGenerating(false);
+        // Build 3DGS Three.js Mesh
+        const mesh = createCustomGaussianSplatMesh(splat, {
+          pointScale: pointScale,
+          particleRevealProgress: 1.0,
         });
-    }, 150);
+
+        sceneRef.current.add(mesh);
+        splatMeshRef.current = mesh;
+
+        setSplatStats({
+          count: splat.count,
+          bounds: `${(splat.bounds.max[0] - splat.bounds.min[0]).toFixed(1)}m x ${(splat.bounds.max[1] - splat.bounds.min[1]).toFixed(1)}m`,
+        });
+
+        setIsGenerating(false);
+
+        // Notify downstream nodes
+        if (data?.onSplatDataReady) {
+          data.onSplatDataReady(splat, id);
+        }
+      })
+      .catch((err) => {
+        console.warn('Image to splat synthesis error:', err);
+        if (isCurrent) setIsGenerating(false);
+      });
 
     return () => {
       isCurrent = false;
-      clearTimeout(timer);
     };
   }, [selectedImage, depthExtrusion]);
 
@@ -387,3 +384,5 @@ export default function ReefImageInputNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(ReefImageInputNode);
