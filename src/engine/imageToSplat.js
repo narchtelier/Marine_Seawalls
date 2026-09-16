@@ -6,6 +6,8 @@ import * as THREE from 'three';
  * with positions, anisotropic scales, rotation quaternions, opacities, and RGB colors.
  */
 
+const splatCache = new Map();
+
 export async function generateSplatFromImage(imageSrc, options = {}) {
   const {
     densityResolution = 140, // Grid sample resolution
@@ -13,6 +15,11 @@ export async function generateSplatFromImage(imageSrc, options = {}) {
     opacityCutoff = 0.16,    // Filter dark/background ocean pixels
     splatScaleBase = 0.024,  // Base radius of Gaussian splats
   } = options;
+
+  const cacheKey = `${imageSrc}_${depthExtrusion}_${splatScaleBase}_${densityResolution}`;
+  if (splatCache.has(cacheKey)) {
+    return splatCache.get(cacheKey);
+  }
 
   // 1. Load image into HTMLCanvasElement to extract pixel data
   const img = await loadImage(imageSrc);
@@ -265,6 +272,9 @@ export async function generateSplatFromImage(imageSrc, options = {}) {
     },
     sourceImage: imageSrc,
   };
+
+  splatCache.set(cacheKey, result);
+  return result;
 }
 
 /**
