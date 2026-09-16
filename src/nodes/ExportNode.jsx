@@ -5,7 +5,7 @@ import confetti from 'canvas-confetti';
 import * as THREE from 'three';
 import { exportGroupToOBJ, exportGroupToSTL, exportParametersJSON } from '../engine/exporters';
 
-export default function ExportNode({ data }) {
+function ExportNode({ data }) {
   let meshGroup = data.coralMesh || data.reconstructedMesh;
   const params = data.parameters || {};
 
@@ -113,3 +113,5 @@ export default function ExportNode({ data }) {
     </div>
   );
 }
+
+export default React.memo(ExportNode);
