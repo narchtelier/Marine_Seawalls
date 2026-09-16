@@ -2,23 +2,25 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import {
   Grid,
-  Activity,
-  Zap,
-  Sliders,
-  Sparkles,
-  Info,
-  CheckCircle2,
+  Box,
+  RotateCw,
+  Flame,
+  Blend,
   Trash2,
-  Unlink
+  Unlink,
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 import { generateSOMGrid } from '../engine/somInterpolation';
-import { DEFAULT_CORAL_PRESETS } from '../engine/defaultCorals';
 import { interpolateGeometriesSOM, getFallbackSpecimenGeometry } from '../engine/somGeometryInterpolator';
+import SOMGridCanvas from '../components/SOMGridCanvas';
 
-export default function SOMSynthesizerNode({ id, data }) {
+function SOMSynthesizerNode({ id, data }) {
+  const [displayMode, setDisplayMode] = useState('wireframe'); // 'wireframe' | 'hybrid' | 'heatmap'
   const [heatmapMode, setHeatmapMode] = useState('j_eco'); // 'j_eco' | 'tau_diss' | 'sigma_rec' | 'phi'
   const [selectedCoord, setSelectedCoord] = useState({ x: 5, y: 5 });
   const [hoveredCell, setHoveredCell] = useState(null);
+  const [autoRotate, setAutoRotate] = useState(false);
 
   // Derived input specimens from MorphologySynthesizerNode or upstream extractors
   const inputSource = useMemo(() => {
@@ -43,7 +45,7 @@ export default function SOMSynthesizerNode({ id, data }) {
       getFallbackSpecimenGeometry('other');
   }, [data?.geometryB, data?.synthesizerData?.geometryB, data?.specimens]);
 
-  // Generate 10x10 SOM latent space matrix grounded in the connected geometries
+  // Generate 10x10 SOM latent space matrix
   const somGrid = useMemo(() => {
     return generateSOMGrid(inputSource);
   }, [inputSource]);
@@ -76,31 +78,18 @@ export default function SOMSynthesizerNode({ id, data }) {
     }
   }, [activeCell]);
 
-  // Compute color based on metric
-  const getCellColor = (cell) => {
-    const val = cell.metrics[heatmapMode] || 0.5;
-    if (heatmapMode === 'j_eco') {
-      // Emerald / Cyan
-      const h = 160 + val * 60;
-      return `hsl(${h}, 85%, ${30 + val * 35}%)`;
-    } else if (heatmapMode === 'tau_diss') {
-      // Amber / Orange
-      const h = 25 + val * 45;
-      return `hsl(${h}, 90%, ${35 + val * 30}%)`;
-    } else if (heatmapMode === 'sigma_rec') {
-      // Teal / Blue
-      const h = 190 + val * 30;
-      return `hsl(${h}, 85%, ${35 + val * 30}%)`;
-    } else {
-      // Purple / Violet (Porosity)
-      const h = 270 + val * 40;
-      return `hsl(${h}, 80%, ${35 + val * 30}%)`;
-    }
-  };
+  const displayCell = hoveredCell || activeCell;
 
   return (
-    <div className="custom-node" style={{ width: '420px', borderColor: 'rgba(16, 185, 129, 0.45)' }}>
-      {/* Input Handle from Watertight Viewport */}
+    <div
+      className="custom-node"
+      style={{
+        width: '424px',
+        borderColor: 'rgba(16, 185, 129, 0.55)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(16, 185, 129, 0.15)',
+      }}
+    >
+      {/* Input Handle from Watertight Viewport / Synthesizer */}
       <Handle
         type="target"
         position={Position.Left}
@@ -109,18 +98,19 @@ export default function SOMSynthesizerNode({ id, data }) {
       />
 
       {/* Header */}
-      <div className="node-header" style={{ borderBottomColor: 'rgba(16, 185, 129, 0.2)' }}>
+      <div className="node-header" style={{ borderBottomColor: 'rgba(16, 185, 129, 0.25)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div
             style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '6px',
-              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.2))',
+              width: '30px',
+              height: '30px',
+              borderRadius: '7px',
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.35), rgba(14, 165, 233, 0.2))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#10b981',
+              color: '#34d399',
+              boxShadow: '0 0 10px rgba(16, 185, 129, 0.3)',
             }}
           >
             <Grid size={16} />
@@ -130,12 +120,12 @@ export default function SOMSynthesizerNode({ id, data }) {
               4. 10x10 SOM Synthesizer Grid
             </div>
             <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-              3D Self-Organizing Map Latent Morphospace (100 Geometries)
+              3D Wireframe Latent Morphospace (100 Geometries)
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
           {data?.onUnlinkNode && (
             <button
               className="btn-icon"
@@ -159,108 +149,172 @@ export default function SOMSynthesizerNode({ id, data }) {
         </div>
       </div>
 
-      <div className="node-content" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="node-content" style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+        {/* Controls Bar: Mode Switcher & 3D Auto-Rotate */}
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {/* Mode Switcher */}
+          <div style={{ flex: 1, display: 'flex', gap: '3px', background: 'rgba(15, 23, 42, 0.75)', padding: '3px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            {[
+              { id: 'wireframe', label: '3D Wireframe', icon: Box },
+              { id: 'hybrid', label: 'Hybrid Glow', icon: Blend },
+              { id: 'heatmap', label: 'Heatmap', icon: Flame },
+            ].map((mode) => {
+              const Icon = mode.icon;
+              const active = displayMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  onClick={() => setDisplayMode(mode.id)}
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    fontSize: '10px',
+                    padding: '4px 3px',
+                    borderRadius: '4px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: active ? '#10b981' : 'transparent',
+                    color: active ? '#022c22' : 'var(--text-dim)',
+                    fontWeight: active ? 700 : 500,
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Icon size={11} />
+                  <span>{mode.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 3D Orbit / Rotate Toggle */}
+          <button
+            onClick={() => setAutoRotate(!autoRotate)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '10px',
+              padding: '5px 7px',
+              borderRadius: '6px',
+              border: '1px solid rgba(16, 185, 129, 0.3)',
+              cursor: 'pointer',
+              background: autoRotate ? 'rgba(16, 185, 129, 0.25)' : 'rgba(15, 23, 42, 0.75)',
+              color: autoRotate ? '#34d399' : 'var(--text-dim)',
+              fontWeight: autoRotate ? 700 : 500,
+              transition: 'all 0.15s ease',
+            }}
+            title="Toggle continuous 3D rotation of the morphospace"
+          >
+            <RotateCw size={11} className={autoRotate ? 'animate-spin' : ''} />
+            <span>{autoRotate ? 'Rotating' : 'Rotate 3D'}</span>
+          </button>
+        </div>
+
         {/* Heatmap Metric Selector */}
-        <div style={{ display: 'flex', gap: '4px', background: 'rgba(15, 23, 42, 0.6)', padding: '3px', borderRadius: '6px' }}>
+        <div style={{ display: 'flex', gap: '3px', background: 'rgba(11, 19, 32, 0.65)', padding: '2px', borderRadius: '5px' }}>
           {[
-            { id: 'j_eco', label: 'Eco-Fitness (J_eco)' },
-            { id: 'tau_diss', label: 'Wave Shear (τ_diss)' },
-            { id: 'sigma_rec', label: 'Settlement (σ_rec)' },
-            { id: 'phi', label: 'Porosity (Φ)' },
-          ].map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setHeatmapMode(m.id)}
-              style={{
-                flex: 1,
-                fontSize: '10px',
-                padding: '4px 2px',
-                borderRadius: '4px',
-                border: 'none',
-                cursor: 'pointer',
-                background: heatmapMode === m.id ? '#10b981' : 'transparent',
-                color: heatmapMode === m.id ? '#022c22' : 'var(--text-dim)',
-                fontWeight: heatmapMode === m.id ? 700 : 500,
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {m.label.split(' ')[0]}
-            </button>
-          ))}
+            { id: 'j_eco', label: 'J_eco (Eco-Fitness)' },
+            { id: 'tau_diss', label: 'τ_diss (Wave Shear)' },
+            { id: 'sigma_rec', label: 'σ_rec (Settlement)' },
+            { id: 'phi', label: 'Φ (Porosity)' },
+          ].map((m) => {
+            const active = heatmapMode === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setHeatmapMode(m.id)}
+                style={{
+                  flex: 1,
+                  fontSize: '9.5px',
+                  padding: '3px 1px',
+                  borderRadius: '3px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  background: active ? 'rgba(16, 185, 129, 0.22)' : 'transparent',
+                  color: active ? '#34d399' : 'var(--text-dim)',
+                  borderBottom: active ? '2px solid #10b981' : '2px solid transparent',
+                  fontWeight: active ? 700 : 500,
+                  transition: 'all 0.12s ease',
+                }}
+                title={m.label}
+              >
+                {m.label.split(' ')[0]}
+              </button>
+            );
+          })}
         </div>
 
         {/* Grid Axis Anchors */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '10px', padding: '0 2px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '9.5px', padding: '0 2px' }}>
           <span style={{ color: '#10b981', fontWeight: 600 }}>◀ 100% Specimen A</span>
-          <span style={{ color: '#f472b6', fontWeight: 600 }}>Synthetic Hybrids</span>
+          <span style={{ color: '#38bdf8', fontWeight: 600, fontSize: '9px', opacity: 0.85 }}>
+            100 3D Wireframe Snapshots
+          </span>
           <span style={{ color: '#0ea5e9', fontWeight: 600 }}>100% Specimen B ▶</span>
         </div>
 
-        {/* 10x10 SOM Interactive Grid */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(10, 1fr)',
-            gap: '3px',
-            background: 'rgba(15, 23, 42, 0.8)',
-            padding: '6px',
-            borderRadius: '8px',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
-          }}
-        >
-          {somGrid.map((row, j) =>
-            row.map((cell, i) => {
-              const isSelected = selectedCoord.x === i && selectedCoord.y === j;
-              return (
-                <div
-                  key={`${i}-${j}`}
-                  onClick={() => setSelectedCoord({ x: i, y: j })}
-                  onMouseEnter={() => setHoveredCell(cell)}
-                  onMouseLeave={() => setHoveredCell(null)}
-                  style={{
-                    aspectRatio: '1',
-                    background: getCellColor(cell),
-                    borderRadius: '3px',
-                    cursor: 'pointer',
-                    border: isSelected ? '2px solid #ffffff' : '1px solid rgba(0,0,0,0.3)',
-                    boxShadow: isSelected ? '0 0 10px #10b981' : 'none',
-                    transform: isSelected ? 'scale(1.15)' : 'scale(1)',
-                    zIndex: isSelected ? 10 : 1,
-                    transition: 'transform 0.1s ease',
-                  }}
-                  title={`Cell (${i},${j}) - Blend: ${(cell.weightA * 100).toFixed(0)}% A / ${(cell.weightB * 100).toFixed(0)}% B - Score: ${((cell.metrics[heatmapMode] || 0) * 100).toFixed(0)}%`}
-                />
-              );
-            })
-          )}
+        {/* 10x10 Single-Canvas Zero-Drag 3D Wireframe Grid */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <SOMGridCanvas
+            somGrid={somGrid}
+            geomA={geomA}
+            geomB={geomB}
+            activeGeometry={activeCell?.geometry}
+            displayMode={displayMode}
+            heatmapMode={heatmapMode}
+            selectedCoord={selectedCoord}
+            hoveredCell={hoveredCell}
+            onSelectCoord={setSelectedCoord}
+            onHoverCell={setHoveredCell}
+            autoRotate={autoRotate}
+            width={384}
+            height={384}
+          />
         </div>
 
-        {/* Selected Cell Biometric Readout */}
-        {activeCell && (
+        {/* Compact HUD Line (Cell viewer removed; lightweight telemetry only) */}
+        {displayCell && (
           <div
             style={{
-              background: 'rgba(15, 23, 42, 0.6)',
-              border: '1px solid rgba(16, 185, 129, 0.25)',
-              borderRadius: '6px',
-              padding: '8px 10px',
-              fontSize: '11px',
               display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(11, 19, 32, 0.85)',
+              border: '1px solid rgba(16, 185, 129, 0.25)',
+              borderRadius: '5px',
+              padding: '5px 8px',
+              fontSize: '10px',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#10b981', fontWeight: 700 }}>
-                Selected Cell ({activeCell.x}, {activeCell.y})
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <span style={{ color: '#34d399', fontWeight: 700 }}>
+                Cell ({displayCell.x}, {displayCell.y})
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                Morphology: <b style={{ color: '#fff' }}>{activeCell.parameters.morphologyType}</b>
+              <span style={{ color: 'var(--text-dim)' }}>•</span>
+              <span style={{ color: '#e2e8f0' }}>
+                {(displayCell.weightA * 100).toFixed(0)}% A / {(displayCell.weightB * 100).toFixed(0)}% B
               </span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '4px', fontSize: '10px' }}>
-              <div>Rugosity: <b>{activeCell.parameters.rugosity.toFixed(2)}</b></div>
-              <div>Branching: <b>{activeCell.parameters.branchingFactor.toFixed(2)}</b></div>
-              <div>Eco Fitness: <b style={{ color: '#10b981' }}>{(activeCell.metrics.j_eco * 100).toFixed(0)}%</b></div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ color: 'var(--text-dim)', textTransform: 'capitalize' }}>
+                {displayCell.parameters.morphologyType.replace(/_/g, ' ')}
+              </span>
+              <span
+                style={{
+                  background: 'rgba(16, 185, 129, 0.2)',
+                  color: '#34d399',
+                  padding: '1px 5px',
+                  borderRadius: '3px',
+                  fontWeight: 700,
+                  fontSize: '9.5px',
+                }}
+              >
+                J_eco: {((displayCell.metrics.j_eco || 0.5) * 100).toFixed(0)}%
+              </span>
             </div>
           </div>
         )}
@@ -276,3 +330,5 @@ export default function SOMSynthesizerNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(SOMSynthesizerNode);
