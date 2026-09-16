@@ -16,7 +16,7 @@ import {
 import { DEFAULT_CORAL_PRESETS } from '../engine/defaultCorals';
 import { getFallbackSpecimenGeometry } from '../engine/somGeometryInterpolator';
 
-export default function MorphologySynthesizerNode({ id, data }) {
+function MorphologySynthesizerNode({ id, data }) {
   // Connected mesh specimens (can come from mesh-in-1 and mesh-in-2 or data props)
   const specimenA = useMemo(() => {
     const geo = data?.geometryA || data?.specimenA?.geometry || getFallbackSpecimenGeometry('brain');
@@ -341,3 +341,5 @@ export default function MorphologySynthesizerNode({ id, data }) {
     </div>
   );
 }
+
+export default React.memo(MorphologySynthesizerNode);
