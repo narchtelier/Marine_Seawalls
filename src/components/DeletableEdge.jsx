@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BaseEdge, EdgeLabelRenderer, getBezierPath } from '@xyflow/react';
 import { Scissors, X } from 'lucide-react';
 
-export default function DeletableEdge({
+function DeletableEdge({
   id,
   sourceX,
   sourceY,
@@ -106,3 +106,5 @@ export default function DeletableEdge({
     </>
   );
 }
+
+export default React.memo(DeletableEdge);
